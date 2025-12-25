@@ -64,3 +64,8 @@ group :test do
   gem "capybara"
   gem "selenium-webdriver"
 end
+
+gem "httparty", "~> 0.23.2"
+gem "pagy", "~> 43.2"
+
+gem "factory_bot_rails", "~> 6.5", groups: [:development, :test]
