@@ -1,0 +1,150 @@
+<div class="mb-6 flex justify-between items-start">
+  <div>
+    <h1 class="text-3xl font-bold">Quarantined Versions</h1>
+    <p class="text-base-content/70">Gem versions currently held in quarantine</p>
+  </div>
+  <% if QuarantinedVersion.expired.any? && SpecsAvailabilityService.available? %>
+    <%= button_to "Approve All Expired", approve_all_expired_admin_quarantined_versions_path,
+        method: :post,
+        class: "btn btn-success",
+        data: { confirm: "This will approve all #{QuarantinedVersion.expired.count} expired versions. Continue?" } %>
+  <% end %>
+</div>
+
+<% unless SpecsAvailabilityService.available? %>
+  <div class="alert alert-warning mb-6">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <div>
+      <h3 class="font-bold">Specs not synced</h3>
+      <p class="text-sm"><%= SpecsAvailabilityService.status_message %> Approve/block actions are disabled until specs are available.</p>
+    </div>
+  </div>
+<% end %>
+
+<div class="stats shadow mb-6">
+  <div class="stat">
+    <div class="stat-title">Active</div>
+    <div class="stat-value text-warning"><%= QuarantinedVersion.active.count %></div>
+    <div class="stat-desc">Still in quarantine</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Expired</div>
+    <div class="stat-value text-success"><%= QuarantinedVersion.expired.count %></div>
+    <div class="stat-desc">Ready to approve</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Quarantine Period</div>
+    <div class="stat-value text-info"><%= Setting.quarantine_hours %>h</div>
+    <div class="stat-desc"><%= (Setting.quarantine_hours / 24.0).round(1) %> days</div>
+  </div>
+</div>
+
+<div class="card bg-base-100 shadow mb-6">
+  <div class="card-body">
+    <%= form_with url: admin_quarantined_versions_path, method: :get, class: "flex flex-wrap gap-4" do |f| %>
+      <div class="form-control flex-1 min-w-[200px]">
+        <input type="text" name="search" value="<%= params[:search] %>" placeholder="Search gems..." class="input input-bordered w-full" />
+      </div>
+      <div class="form-control">
+        <select name="status" class="select select-bordered">
+          <option value="">All</option>
+          <option value="active" <%= "selected" if params[:status] == "active" %>>Active (in quarantine)</option>
+          <option value="expired" <%= "selected" if params[:status] == "expired" %>>Expired (ready to approve)</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Filter</button>
+      <% if params[:search].present? || params[:status].present? %>
+        <%= link_to "Clear", admin_quarantined_versions_path, class: "btn btn-ghost" %>
+      <% end %>
+    <% end %>
+  </div>
+</div>
+
+<div class="card bg-base-100 shadow">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Gem Name</th>
+          <th>Version</th>
+          <th>Platform</th>
+          <th>First Seen</th>
+          <th>Status</th>
+          <th>Time Remaining</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @quarantined_versions.each do |qv| %>
+          <tr class="hover">
+            <td>
+              <div class="font-bold"><%= qv.name %></div>
+            </td>
+            <td>
+              <span class="font-mono"><%= qv.version %></span>
+            </td>
+            <td>
+              <span class="badge badge-ghost badge-sm"><%= qv.platform %></span>
+            </td>
+            <td class="text-sm text-base-content/70">
+              <%= time_ago_in_words(qv.first_seen_at) %> ago
+              <div class="text-xs"><%= qv.first_seen_at.strftime("%Y-%m-%d %H:%M") %></div>
+            </td>
+            <td>
+              <% if qv.expired? %>
+                <span class="badge badge-success">Expired</span>
+              <% else %>
+                <span class="badge badge-warning">Active</span>
+              <% end %>
+            </td>
+            <td>
+              <% if qv.expired? %>
+                <span class="text-success">Ready to approve</span>
+              <% else %>
+                <% expires_at = qv.first_seen_at + Setting.quarantine_period %>
+                <span class="text-warning"><%= distance_of_time_in_words_to_now(expires_at) %></span>
+              <% end %>
+            </td>
+            <td>
+              <div class="flex gap-1">
+                <% if SpecsAvailabilityService.available? %>
+                  <%= button_to "Approve", approve_admin_quarantined_version_path(qv),
+                      method: :post,
+                      class: "btn btn-success btn-xs",
+                      title: "Approve and make available immediately" %>
+                  <%= button_to "Block", block_admin_quarantined_version_path(qv),
+                      method: :post,
+                      class: "btn btn-error btn-xs",
+                      data: { confirm: "Block #{qv.name} #{qv.version}? This will permanently prevent it from being served." } %>
+                  <%= button_to "Remove", admin_quarantined_version_path(qv),
+                      method: :delete,
+                      class: "btn btn-ghost btn-xs",
+                      title: "Remove from quarantine list without approving" %>
+                <% else %>
+                  <span class="text-base-content/50 text-xs">Sync specs first</span>
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @quarantined_versions.empty? %>
+    <div class="p-8 text-center text-base-content/70">
+      <p>No quarantined versions found.</p>
+      <% if params[:search].present? || params[:status].present? %>
+        <p class="mt-2"><%= link_to "Clear filters", admin_quarantined_versions_path, class: "link" %></p>
+      <% end %>
+    </div>
+  <% end %>
+</div>
+
+<% if @pagy.pages > 1 %>
+  <div class="flex justify-center mt-6">
+    <%== @pagy.series_nav %>
+  </div>
+<% end %>

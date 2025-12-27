@@ -1,0 +1,75 @@
+<div class="mb-8">
+  <h1 class="text-3xl font-bold">Dashboard</h1>
+  <p class="text-base-content/70">GemGuard security proxy overview</p>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+  <div class="stat bg-base-100 rounded-box shadow">
+    <div class="stat-figure text-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    </div>
+    <div class="stat-title">Total Gems</div>
+    <div class="stat-value text-primary"><%= number_with_delimiter(@stats[:total_gems]) %></div>
+    <div class="stat-desc"><%= number_with_delimiter(@stats[:total_versions]) %> versions</div>
+  </div>
+
+  <div class="stat bg-base-100 rounded-box shadow">
+    <div class="stat-figure text-warning">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    </div>
+    <div class="stat-title">Quarantined</div>
+    <div class="stat-value text-warning"><%= number_with_delimiter(@stats[:quarantined]) %></div>
+    <div class="stat-desc">Awaiting approval</div>
+  </div>
+
+  <div class="stat bg-base-100 rounded-box shadow">
+    <div class="stat-figure text-success">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <div class="stat-title">Approved</div>
+    <div class="stat-value text-success"><%= number_with_delimiter(@stats[:approved]) %></div>
+    <div class="stat-desc">Safe to use</div>
+  </div>
+
+  <div class="stat bg-base-100 rounded-box shadow">
+    <div class="stat-figure text-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+      </svg>
+    </div>
+    <div class="stat-title">Blocked</div>
+    <div class="stat-value text-error"><%= number_with_delimiter(@stats[:blocked]) %></div>
+    <div class="stat-desc">Denied access</div>
+  </div>
+
+  <div class="stat bg-base-100 rounded-box shadow">
+    <div class="stat-figure text-info">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+    </div>
+    <div class="stat-title">Downloads (24h)</div>
+    <div class="stat-value text-info"><%= number_with_delimiter(@stats[:recent_downloads]) %></div>
+    <div class="stat-desc">Last 24 hours</div>
+  </div>
+</div>
+
+<div class="card bg-base-100 shadow">
+  <div class="card-body">
+    <h2 class="card-title">Quick Setup</h2>
+    <p>To use GemGuard as your gem source, update your Gemfile:</p>
+    <div class="mockup-code mt-4">
+      <pre data-prefix="1"><code>source "http://localhost:3000" do</code></pre>
+      <pre data-prefix="2"><code>  gem "rails"</code></pre>
+      <pre data-prefix="3"><code>  gem "pg"</code></pre>
+      <pre data-prefix="4"><code>  # ... your gems</code></pre>
+      <pre data-prefix="5"><code>end</code></pre>
+    </div>
+  </div>
+</div>

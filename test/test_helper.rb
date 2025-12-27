@@ -4,12 +4,22 @@ require "rails/test_help"
 
 module ActiveSupport
   class TestCase
-    # Run tests in parallel with specified workers
+    include FactoryBot::Syntax::Methods
+
     parallelize(workers: :number_of_processors)
 
-    # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
-    fixtures :all
-
-    # Add more helper methods to be used by all tests here...
+    # Clean database between tests
+    setup do
+      GemPackage.delete_all
+      GemVersion.delete_all
+      QuarantineRule.delete_all
+      QuarantinedVersion.delete_all
+      AuditLog.delete_all
+      Setting.delete_all
+    end
   end
+end
+
+class ActionDispatch::IntegrationTest
+  include FactoryBot::Syntax::Methods
 end

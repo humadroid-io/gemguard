@@ -1,0 +1,86 @@
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-3xl font-bold">Audit Logs</h1>
+    <p class="text-base-content/70">Track all gem requests and downloads</p>
+  </div>
+  <%= link_to "Export CSV", export_admin_audit_logs_path(format: :csv, date_from: params[:date_from], date_to: params[:date_to]), class: "btn btn-outline" %>
+</div>
+
+<div class="card bg-base-100 shadow mb-6">
+  <div class="card-body">
+    <%= form_with url: admin_audit_logs_path, method: :get, class: "flex flex-wrap gap-4" do |f| %>
+      <div class="form-control">
+        <input type="text" name="gem_name" value="<%= params[:gem_name] %>" placeholder="Gem name..." class="input input-bordered" />
+      </div>
+      <div class="form-control">
+        <select name="action_type" class="select select-bordered">
+          <option value="">All actions</option>
+          <option value="download" <%= "selected" if params[:action_type] == "download" %>>Download</option>
+          <option value="spec_request" <%= "selected" if params[:action_type] == "spec_request" %>>Spec Request</option>
+        </select>
+      </div>
+      <div class="form-control">
+        <input type="date" name="date_from" value="<%= params[:date_from] %>" class="input input-bordered" placeholder="From date" />
+      </div>
+      <div class="form-control">
+        <input type="date" name="date_to" value="<%= params[:date_to] %>" class="input input-bordered" placeholder="To date" />
+      </div>
+      <button type="submit" class="btn btn-primary">Filter</button>
+      <% if params[:gem_name].present? || params[:action_type].present? || params[:date_from].present? || params[:date_to].present? %>
+        <%= link_to "Clear", admin_audit_logs_path, class: "btn btn-ghost" %>
+      <% end %>
+    <% end %>
+  </div>
+</div>
+
+<div class="card bg-base-100 shadow">
+  <div class="overflow-x-auto">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Action</th>
+          <th>Gem</th>
+          <th>Version</th>
+          <th>IP Address</th>
+          <th>Bundler Version</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @audit_logs.each do |log| %>
+          <tr class="hover">
+            <td class="text-sm">
+              <%= log.requested_at.strftime("%Y-%m-%d %H:%M:%S") %>
+            </td>
+            <td>
+              <% case log.action %>
+              <% when "download" %>
+                <span class="badge badge-success badge-sm">Download</span>
+              <% when "spec_request" %>
+                <span class="badge badge-info badge-sm">Spec Request</span>
+              <% else %>
+                <span class="badge badge-ghost badge-sm"><%= log.action %></span>
+              <% end %>
+            </td>
+            <td class="font-mono text-sm"><%= log.gem_name %></td>
+            <td class="font-mono text-sm"><%= log.version || "-" %></td>
+            <td class="text-sm text-base-content/70"><%= log.ip_address || "-" %></td>
+            <td class="text-sm text-base-content/70"><%= log.bundle_version || "-" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @audit_logs.empty? %>
+    <div class="p-8 text-center text-base-content/70">
+      <p>No audit logs found.</p>
+    </div>
+  <% end %>
+</div>
+
+<% if @pagy.pages > 1 %>
+  <div class="flex justify-center mt-6">
+    <%== @pagy.series_nav %>
+  </div>
+<% end %>

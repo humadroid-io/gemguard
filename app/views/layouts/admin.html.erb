@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html data-theme="light">
+  <head>
+    <title><%= content_for(:title) || "GemGuard Admin" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="application-name" content="GemGuard">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
+  </head>
+
+  <body class="min-h-screen bg-base-200">
+    <% quarantined_count = QuarantinedVersion.active.count %>
+    <div class="navbar bg-base-100 shadow-lg">
+      <div class="flex-1">
+        <%= link_to admin_root_path, class: "btn btn-ghost text-xl" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          GemGuard
+        <% end %>
+        <% if quarantined_count > 0 %>
+          <%= link_to admin_quarantined_versions_path, class: "badge badge-warning gap-1 ml-2 hover:badge-outline" do %>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <%= number_with_delimiter(quarantined_count) %> quarantined
+          <% end %>
+        <% end %>
+      </div>
+      <div class="flex-none">
+        <ul class="menu menu-horizontal px-1">
+          <li><%= link_to "Dashboard", admin_root_path %></li>
+          <li><%= link_to "Gems", admin_gem_packages_path %></li>
+          <li><%= link_to "Quarantine", admin_quarantined_versions_path %></li>
+          <li><%= link_to "Rules", admin_quarantine_rules_path %></li>
+          <li><%= link_to "Logs", admin_audit_logs_path %></li>
+          <li><%= link_to "Settings", admin_settings_path %></li>
+        </ul>
+      </div>
+    </div>
+
+    <main class="container mx-auto p-6">
+      <% if notice.present? %>
+        <div class="alert alert-success mb-4">
+          <span><%= notice %></span>
+        </div>
+      <% end %>
+
+      <% if alert.present? %>
+        <div class="alert alert-error mb-4">
+          <span><%= alert %></span>
+        </div>
+      <% end %>
+
+      <%= yield %>
+    </main>
+  </body>
+</html>

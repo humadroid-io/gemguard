@@ -1,14 +1,45 @@
 Rails.application.routes.draw do
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
+  # RubyGems-compatible API endpoints (Bundler requires these)
+  get "specs.4.8.gz", to: "api/specs#index", defaults: {format: :marshal}
+  get "latest_specs.4.8.gz", to: "api/specs#latest", defaults: {format: :marshal}
+  get "prerelease_specs.4.8.gz", to: "api/specs#prerelease", defaults: {format: :marshal}
+  get "gems/:id", to: "api/gems#show", constraints: {id: /[^\/]+\.gem/}
+  get "quick/Marshal.4.8/:id", to: "api/gemspecs#show", constraints: {id: /[^\/]+\.gemspec\.rz/}
 
-  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  # Can be used by load balancers and uptime monitors to verify that the app is live.
-  get "up" => "rails/health#show", as: :rails_health_check
+  # Admin interface
+  namespace :admin do
+    root to: "dashboard#index"
+    resources :gem_packages, only: [:index, :show] do
+      member do
+        post :refresh
+        post "versions/:version_id/approve", action: :approve_version, as: :approve_version
+        post "versions/:version_id/block", action: :block_version, as: :block_version
+      end
+    end
+    resources :quarantined_versions, only: [:index, :destroy] do
+      member do
+        post :approve
+        post :block
+      end
+      collection do
+        post :approve_all_expired
+      end
+    end
+    resources :quarantine_rules, except: [:show]
+    resources :audit_logs, only: [:index] do
+      collection do
+        get :export
+      end
+    end
+    resource :settings, only: [:show, :update] do
+      post :import_baseline
+    end
+  end
+  mount MissionControl::Jobs::Engine, at: "/admin/jobs"
 
-  # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
-  # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
-  # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
+  # Health check
+  get "up" => "rails/health#show", :as => :rails_health_check
 
-  # Defines the root path route ("/")
-  # root "posts#index"
+  # Root
+  root "admin/dashboard#index"
 end

@@ -1,15 +1,50 @@
-# examples:
-#   periodic_cleanup:
-#     class: CleanSoftDeletedRecordsJob
-#     queue: background
-#     args: [ 1000, { batch_size: 500 } ]
-#     schedule: every hour
-#   periodic_cleanup_with_command:
-#     command: "SoftDeletedRecord.due.delete_all"
-#     priority: 2
-#     schedule: at 5am every day
+# Recurring background jobs for GemGuard
+# See: https://github.com/rails/solid_queue#recurring-tasks
+
+default: &default
+  # Sync specs from RubyGems.org
+  sync_all_specs:
+    class: SyncSpecsJob
+    args:
+      - type: all
+    schedule: every 6 hours
+
+  sync_latest_specs:
+    class: SyncSpecsJob
+    args:
+      - type: latest
+    schedule: every 10 minutes
+
+  sync_prerelease_specs:
+    class: SyncSpecsJob
+    args:
+      - type: prerelease
+    schedule: every hour
+
+  # Auto-approve gems past quarantine period
+  approve_expired_quarantine:
+    class: ApproveExpiredQuarantineJob
+    schedule: every 5 minutes
+
+  # Cleanup expired quarantine tracking entries
+  cleanup_quarantined_versions:
+    class: CleanupQuarantinedVersionsJob
+    queue: low
+    schedule: every hour
+
+  # Refresh tracked gems for new versions
+  refresh_tracked_gems:
+    class: RefreshTrackedGemsJob
+    queue: low
+    schedule: every 6 hours
+
+development:
+  <<: *default
 
 production:
+  <<: *default
+
+  # Clear finished Solid Queue jobs (production only)
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12

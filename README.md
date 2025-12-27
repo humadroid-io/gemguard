@@ -94,6 +94,51 @@ This runs:
 - JavaScript bundler (esbuild)
 - CSS compiler (Tailwind)
 
+#### Running on a Custom Port
+
+To run GemGuard alongside other Rails apps, use a different port:
+
+```bash
+PORT=3001 bin/dev
+```
+
+Then update your app's Gemfile to use GemGuard:
+
+```ruby
+source "http://localhost:3001"  # Instead of "https://rubygems.org"
+```
+
+## How It Works
+
+GemGuard uses a **filtered specs** approach for transparent quarantine:
+
+1. **Specs sync**: Background jobs sync gem indices from RubyGems.org and detect new versions
+2. **Quarantine tracking**: New versions are tracked in a lightweight `quarantined_versions` table
+3. **Filtered specs**: GemGuard builds filtered specs excluding quarantined versions - Bundler only sees available gems
+4. **On-demand details**: When a gem is requested, GemGuard fetches full metadata from RubyGems API
+5. **Smart approval**: Gems past the quarantine period (based on RubyGems publish date) are auto-approved
+6. **Local caching**: Downloaded gems are cached locally for offline use and faster subsequent installs
+
+This means:
+- Bundler never sees quarantined gems (no confusing errors)
+- Your database only contains gems your team actually uses
+- Quarantine is based on actual RubyGems publish date, not when you first synced
+
+## Background Jobs
+
+GemGuard uses Solid Queue for background job processing. The following jobs run automatically:
+
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| **Sync All Specs** | Every 6 hours | Downloads full gem index, tracks new versions, builds filtered specs |
+| **Sync Latest Specs** | Every 10 minutes | Downloads latest versions index, tracks new versions, builds filtered specs |
+| **Sync Prerelease Specs** | Every hour | Downloads prerelease index, tracks new versions, builds filtered specs |
+| **Approve Expired Quarantine** | Every 5 minutes | Auto-approves `GemVersion` records past quarantine period |
+| **Cleanup Quarantined Versions** | Every hour | Removes expired entries from `quarantined_versions` table |
+| **Clear Finished Jobs** | Every hour | Cleans up completed job records (production only) |
+
+Jobs are configured in `config/recurring.yml`.
+
 ## Testing
 
 ```bash

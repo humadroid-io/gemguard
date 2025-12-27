@@ -1,0 +1,101 @@
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-3xl font-bold">Quarantine Rules</h1>
+    <p class="text-base-content/70">Configure when gems should be quarantined</p>
+  </div>
+  <%= link_to "New Rule", new_admin_quarantine_rule_path, class: "btn btn-primary" %>
+</div>
+
+<div class="card bg-base-100 shadow">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Scope</th>
+          <th>Value</th>
+          <th>Description</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @quarantine_rules.each do |rule| %>
+          <tr class="hover">
+            <td>
+              <% case rule.rule_type %>
+              <% when "time_based" %>
+                <span class="badge badge-info">Time Based</span>
+              <% when "version_pattern" %>
+                <span class="badge badge-secondary">Version Pattern</span>
+              <% when "manual" %>
+                <span class="badge badge-warning">Manual</span>
+              <% end %>
+            </td>
+            <td>
+              <% if rule.global? %>
+                <span class="badge badge-ghost">Global</span>
+              <% else %>
+                <span class="font-mono text-sm"><%= rule.gem_package.name %></span>
+              <% end %>
+            </td>
+            <td>
+              <% if rule.value.present? %>
+                <code class="bg-base-200 px-2 py-1 rounded text-sm"><%= rule.value %></code>
+              <% else %>
+                <span class="text-base-content/50">-</span>
+              <% end %>
+            </td>
+            <td class="max-w-xs">
+              <% if rule.description.present? %>
+                <span class="text-sm"><%= truncate(rule.description, length: 50) %></span>
+              <% else %>
+                <span class="text-base-content/50">-</span>
+              <% end %>
+            </td>
+            <td>
+              <% if rule.enabled? %>
+                <span class="badge badge-success">Enabled</span>
+              <% else %>
+                <span class="badge badge-ghost">Disabled</span>
+              <% end %>
+            </td>
+            <td>
+              <div class="flex gap-1">
+                <%= link_to "Edit", edit_admin_quarantine_rule_path(rule), class: "btn btn-ghost btn-sm" %>
+                <%= button_to "Delete", admin_quarantine_rule_path(rule), method: :delete, class: "btn btn-ghost btn-sm text-error", data: { confirm: "Are you sure?" } %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @quarantine_rules.empty? %>
+    <div class="p-8 text-center text-base-content/70">
+      <p>No quarantine rules defined yet.</p>
+      <p class="mt-2">The default 72-hour quarantine period is applied via <%= link_to "Settings", admin_settings_path, class: "link link-primary" %>.</p>
+    </div>
+  <% end %>
+</div>
+
+<div class="card bg-base-100 shadow mt-6">
+  <div class="card-body">
+    <h2 class="card-title">Rule Types</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+      <div>
+        <h3 class="font-bold">Time Based</h3>
+        <p class="text-sm text-base-content/70">Quarantine versions seen within X hours. Value is the number of hours.</p>
+      </div>
+      <div>
+        <h3 class="font-bold">Version Pattern</h3>
+        <p class="text-sm text-base-content/70">Quarantine versions matching a regex pattern. E.g., <code>alpha|beta|rc</code></p>
+      </div>
+      <div>
+        <h3 class="font-bold">Manual</h3>
+        <p class="text-sm text-base-content/70">Always quarantine matching gems until manually approved.</p>
+      </div>
+    </div>
+  </div>
+</div>

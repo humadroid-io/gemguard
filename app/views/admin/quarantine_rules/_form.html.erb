@@ -1,0 +1,54 @@
+<%= form_with model: [:admin, @quarantine_rule], class: "space-y-6" do |f| %>
+  <% if @quarantine_rule.errors.any? %>
+    <div class="alert alert-error">
+      <ul class="list-disc list-inside">
+        <% @quarantine_rule.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="form-control">
+    <%= f.label :rule_type, "Rule Type", class: "label" %>
+    <%= f.select :rule_type, QuarantineRule.rule_types.keys.map { |t| [t.humanize, t] }, {}, class: "select select-bordered w-full max-w-xs" %>
+    <label class="label">
+      <span class="label-text-alt text-base-content/70">How should this rule evaluate versions?</span>
+    </label>
+  </div>
+
+  <div class="form-control">
+    <%= f.label :gem_package_id, "Gem Package", class: "label" %>
+    <%= f.select :gem_package_id, @gem_packages.map { |g| [g.name, g.id] }, { include_blank: "Global (all gems)" }, class: "select select-bordered w-full max-w-xs" %>
+    <label class="label">
+      <span class="label-text-alt text-base-content/70">Leave blank to apply to all gems</span>
+    </label>
+  </div>
+
+  <div class="form-control">
+    <%= f.label :value, "Value", class: "label" %>
+    <%= f.text_field :value, class: "input input-bordered w-full max-w-md", placeholder: "e.g., 72 for hours or alpha|beta for patterns" %>
+    <label class="label">
+      <span class="label-text-alt text-base-content/70">
+        For time-based: number of hours. For patterns: regex to match version strings.
+      </span>
+    </label>
+  </div>
+
+  <div class="form-control">
+    <%= f.label :description, "Description", class: "label" %>
+    <%= f.text_area :description, class: "textarea textarea-bordered w-full max-w-md", rows: 2, placeholder: "Optional description for this rule" %>
+  </div>
+
+  <div class="form-control">
+    <label class="label cursor-pointer justify-start gap-4">
+      <%= f.check_box :enabled, class: "checkbox checkbox-primary" %>
+      <span class="label-text">Enabled</span>
+    </label>
+  </div>
+
+  <div class="flex gap-2">
+    <%= f.submit class: "btn btn-primary" %>
+    <%= link_to "Cancel", admin_quarantine_rules_path, class: "btn btn-ghost" %>
+  </div>
+<% end %>
