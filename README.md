@@ -66,6 +66,25 @@ That's it! No agents to install, no complex configuration, no changes to your wo
 - **Frontend**: Tailwind CSS, Hotwire (Turbo + Stimulus), esbuild
 - **Deployment**: Docker, Kamal
 
+### SQLite Performance
+
+GemGuard uses SQLite, which comfortably handles the full RubyGems baseline (~200k gems, ~4M versions, ~2GB database). SQLite is well-suited for this workload because:
+
+- **Read-heavy**: Most operations are gem lookups, not writes
+- **Simple queries**: Lookups by name/version, no complex analytics
+- **WAL mode**: Rails 8 enables Write-Ahead Logging by default for concurrent access
+- **Proper indexes**: All lookup columns are indexed
+
+SQLite routinely handles 10-100GB databases. If you need to verify performance:
+
+```bash
+# Check database stats
+sqlite3 storage/production.sqlite3 "SELECT COUNT(*) FROM gem_versions;"
+
+# Verify query uses index
+sqlite3 storage/production.sqlite3 "EXPLAIN QUERY PLAN SELECT * FROM gem_versions WHERE gem_package_id = 1;"
+```
+
 ## Getting Started
 
 ### Prerequisites
@@ -123,6 +142,46 @@ This means:
 - Bundler never sees quarantined gems (no confusing errors)
 - Your database only contains gems your team actually uses
 - Quarantine is based on actual RubyGems publish date, not when you first synced
+
+## Baseline Import
+
+Before GemGuard can properly quarantine gems, it needs to know which gems existed before installation. This is called the "baseline". Gems in the baseline are automatically approved; only new versions released after the baseline are quarantined.
+
+### Import Options
+
+| Method | Data Size | Time | What You Get |
+|--------|-----------|------|--------------|
+| **From Specs** (Recommended) | ~30MB | 2-5 min | All gem names/versions, ready-to-use specs files |
+| **Full RubyGems Dump** | ~900MB | 10-30 min | Complete data with accurate release dates |
+| **CSV Baseline** | Varies | 1-2 min | Pre-built baseline (requires external file) |
+
+### Via Admin UI
+
+Navigate to **Admin → Settings** and choose an import option in the "Baseline Database" section.
+
+### Via Rake Tasks
+
+```bash
+# Recommended: Import from RubyGems specs files
+bin/rails baseline:import_from_specs
+
+# Include prerelease versions
+INCLUDE_PRERELEASE=1 bin/rails baseline:import_from_specs
+
+# Full dump with accurate release dates
+bin/rails baseline:import_from_dump
+
+# CSV baseline (if you have a baseline file)
+bin/rails baseline:import
+```
+
+### Which Option Should I Choose?
+
+- **From Specs** (Recommended): Best balance of speed and completeness. Downloads specs files directly from RubyGems, parses all gem versions, and saves the specs for immediate use by the filtering system.
+
+- **Full Dump**: Use if you need accurate original release dates for all gems (for precise quarantine calculations based on when gems were actually published on RubyGems.org).
+
+- **CSV Baseline**: Use if you have a pre-built baseline file from another GemGuard instance or a custom source.
 
 ## Background Jobs
 
