@@ -2,23 +2,25 @@
 
 A self-hosted security proxy for RubyGems that helps development teams protect against supply chain attacks and achieve SOC2 compliance through intelligent dependency management.
 
-## 🎯 What is GemGuard?
+## What is GemGuard?
 
 GemGuard acts as a transparent proxy between your Bundler and RubyGems.org, adding enterprise-grade security controls without changing your development workflow. Simply replace one line in your Gemfile, and GemGuard automatically:
 
-- **🛡️ Quarantines new gem versions** for 72 hours (configurable) to protect against malicious updates
-- **📦 Caches all dependencies locally** to prevent outages and ensure reproducible builds
-- **📝 Maintains comprehensive audit logs** for SOC2 compliance and security reviews
-- **🚨 Alerts on suspicious updates** via email/Slack when new versions are published
+- **Quarantines new gem versions** for 72 hours (configurable) to protect against malicious updates
+- **Caches all dependencies locally** to prevent outages and ensure reproducible builds
+- **Maintains comprehensive audit logs** for SOC2 compliance and security reviews
+- **Alerts on suspicious updates** via email/Slack when new versions are published
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-# Deploy with Docker
-docker run -d -p 3000:3000 gemguard/gemguard
+# Clone and start with Docker Compose
+git clone https://github.com/your-org/gemguard.git
+cd gemguard
+docker compose up -d
 
 # Update your Gemfile
-source "http://localhost:3000"  # Instead of "https://rubygems.org"
+source "http://localhost:9292"  # Instead of "https://rubygems.org"
 
 # Install gems as usual
 bundle install
@@ -26,7 +28,7 @@ bundle install
 
 That's it! No agents to install, no complex configuration, no changes to your workflow.
 
-## ✨ Key Features
+## Key Features
 
 ### Security First
 
@@ -34,7 +36,7 @@ That's it! No agents to install, no complex configuration, no changes to your wo
 - **Version Pinning**: Block specific versions or require manual approval
 - **Vulnerability Scanning**: Integration with Ruby Advisory Database (coming soon)
 
-### SOC2 Compliance Ready  
+### SOC2 Compliance Ready
 
 - **Complete Audit Trail**: Track who installed what, when, and from where
 - **Compliance Reports**: Export audit logs for security reviews
@@ -52,11 +54,115 @@ That's it! No agents to install, no complex configuration, no changes to your wo
 - **Local Cache**: All gems cached after first download
 - **Lightweight**: Runs on a $5/month VPS with SQLite
 
-## 🏢 Who is GemGuard For?
+## Who is GemGuard For?
 
 - **Small to Medium Teams** (5-50 developers) who need enterprise-grade security without enterprise complexity
 - **Rails Consultancies** managing multiple client applications
 - **Regulated Industries** (healthcare, fintech)
+
+## Self-Hosting with Docker
+
+### Using Docker Compose (Recommended)
+
+The easiest way to run GemGuard locally or on a server:
+
+```bash
+# Start GemGuard on port 9292
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+GemGuard will be available at `http://localhost:9292`.
+
+#### Custom Port
+
+To use a different port, set the `GEMGUARD_PORT` environment variable:
+
+```bash
+# Run on port 3001
+GEMGUARD_PORT=3001 docker compose up -d
+```
+
+Or create a `.env` file:
+
+```bash
+echo "GEMGUARD_PORT=3001" > .env
+docker compose up -d
+```
+
+#### Persistent Data
+
+Docker Compose automatically creates volumes for:
+
+- `gemguard_storage` - Specs files and cached gems
+- `gemguard_db` - SQLite database
+
+Data persists across container restarts.
+
+### Using Docker Directly
+
+```bash
+# Build the image
+docker build -t gemguard .
+
+# Run on port 9292
+docker run -d \
+  --name gemguard \
+  -p 9292:80 \
+  -v gemguard_storage:/rails/storage \
+  -v gemguard_db:/rails/db \
+  -e RAILS_MASTER_KEY="$(cat config/master.key)" \
+  gemguard
+
+# View logs
+docker logs -f gemguard
+
+# Stop
+docker stop gemguard && docker rm gemguard
+```
+
+### First Run: Import Baseline
+
+After starting GemGuard for the first time, you need to import the baseline from RubyGems.org. This tells GemGuard which gems existed before your installation, so only NEW versions get quarantined.
+
+#### Via Admin UI
+
+1. Navigate to `http://localhost:9292/admin/settings`
+2. Click "Import Baseline"
+3. Wait 2-5 minutes for the import to complete
+
+#### Via Rake Task
+
+```bash
+# If using Docker Compose
+docker compose exec web bin/rails baseline:import
+
+# If using Docker directly
+docker exec -it gemguard bin/rails baseline:import
+```
+
+### Configuring Your Projects
+
+Update your project's Gemfile to use GemGuard:
+
+```ruby
+# Before
+source "https://rubygems.org"
+
+# After
+source "http://localhost:9292"
+```
+
+For team-wide deployment, use a hostname accessible to all developers:
+
+```ruby
+source "http://gemguard.internal:9292"
+```
 
 ## Tech Stack
 
@@ -66,26 +172,72 @@ That's it! No agents to install, no complex configuration, no changes to your wo
 - **Frontend**: Tailwind CSS, Hotwire (Turbo + Stimulus), esbuild
 - **Deployment**: Docker, Kamal
 
-### SQLite Performance
+## How It Works
 
-GemGuard uses SQLite, which comfortably handles the full RubyGems baseline (~200k gems, ~4M versions, ~2GB database). SQLite is well-suited for this workload because:
+GemGuard uses a **filtered specs** approach for transparent quarantine:
 
-- **Read-heavy**: Most operations are gem lookups, not writes
-- **Simple queries**: Lookups by name/version, no complex analytics
-- **WAL mode**: Rails 8 enables Write-Ahead Logging by default for concurrent access
-- **Proper indexes**: All lookup columns are indexed
-
-SQLite routinely handles 10-100GB databases. If you need to verify performance:
-
-```bash
-# Check database stats
-sqlite3 storage/production.sqlite3 "SELECT COUNT(*) FROM gem_versions;"
-
-# Verify query uses index
-sqlite3 storage/production.sqlite3 "EXPLAIN QUERY PLAN SELECT * FROM gem_versions WHERE gem_package_id = 1;"
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Bundler   │────▶│  GemGuard   │────▶│ RubyGems.org│
+│  (client)   │◀────│   (proxy)   │◀────│  (upstream) │
+└─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-## Getting Started
+1. **Baseline Import**: Downloads specs files from RubyGems.org (names/versions only, no database records)
+2. **Specs Sync**: Background jobs periodically sync specs and detect NEW versions via diff
+3. **Quarantine Tracking**: New versions are inserted into lightweight `quarantined_versions` table
+4. **Filtered Specs**: GemGuard serves filtered specs excluding quarantined versions - Bundler only sees available gems
+5. **On-Demand Tracking**: When a gem is actually requested, GemGuard creates database records for audit/caching
+6. **Smart Approval**: Gems past the quarantine period are auto-approved
+
+### Why Filtering at Specs Level?
+
+Bundler fetches the specs index (`specs.4.8.gz`) first to know what versions exist, then resolves dependencies locally. If a version isn't in the specs, Bundler doesn't know it exists.
+
+This means:
+- Bundler never sees quarantined gems (no confusing errors)
+- Your database only contains gems your team actually uses
+- Quarantine is based on actual RubyGems publish date
+
+### Database Design
+
+| Table | Purpose | Expected Size |
+|-------|---------|---------------|
+| `quarantined_versions` | Track new versions for filtering | ~6k rows (72h window) |
+| `gem_packages` | Track gems your team uses | 50-500 packages |
+| `gem_versions` | Version details for tracked gems | 100-2000 versions |
+| `audit_logs` | All gem requests | Grows with usage |
+
+### Storage Structure
+
+```
+storage/
+├── specs/
+│   ├── raw/              # Original specs from RubyGems
+│   │   ├── specs.4.8.gz
+│   │   ├── latest_specs.4.8.gz
+│   │   └── prerelease_specs.4.8.gz
+│   ├── specs.4.8.gz      # Filtered (served to Bundler)
+│   ├── latest_specs.4.8.gz
+│   └── prerelease_specs.4.8.gz
+└── gems/                 # Cached .gem files
+```
+
+## Background Jobs
+
+GemGuard uses Solid Queue for background job processing:
+
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| **Sync All Specs** | Every 6 hours | Full specs sync, tracks new versions, builds filtered specs |
+| **Sync Latest Specs** | Every 10 minutes | Latest versions sync for quick detection |
+| **Sync Prerelease Specs** | Every hour | Prerelease versions sync |
+| **Cleanup Quarantined Versions** | Every hour | Removes expired entries from quarantine |
+| **Clear Finished Jobs** | Every hour | Cleans up completed job records |
+
+Jobs are configured in `config/recurring.yml`.
+
+## Development
 
 ### Prerequisites
 
@@ -99,7 +251,7 @@ sqlite3 storage/production.sqlite3 "EXPLAIN QUERY PLAN SELECT * FROM gem_version
 bin/setup
 ```
 
-### Development
+### Development Server
 
 Start the development server with asset watchers:
 
@@ -115,90 +267,13 @@ This runs:
 
 #### Running on a Custom Port
 
-To run GemGuard alongside other Rails apps, use a different port:
+To run GemGuard alongside other Rails apps:
 
 ```bash
 PORT=3001 bin/dev
 ```
 
-Then update your app's Gemfile to use GemGuard:
-
-```ruby
-source "http://localhost:3001"  # Instead of "https://rubygems.org"
-```
-
-## How It Works
-
-GemGuard uses a **filtered specs** approach for transparent quarantine:
-
-1. **Specs sync**: Background jobs sync gem indices from RubyGems.org and detect new versions
-2. **Quarantine tracking**: New versions are tracked in a lightweight `quarantined_versions` table
-3. **Filtered specs**: GemGuard builds filtered specs excluding quarantined versions - Bundler only sees available gems
-4. **On-demand details**: When a gem is requested, GemGuard fetches full metadata from RubyGems API
-5. **Smart approval**: Gems past the quarantine period (based on RubyGems publish date) are auto-approved
-6. **Local caching**: Downloaded gems are cached locally for offline use and faster subsequent installs
-
-This means:
-- Bundler never sees quarantined gems (no confusing errors)
-- Your database only contains gems your team actually uses
-- Quarantine is based on actual RubyGems publish date, not when you first synced
-
-## Baseline Import
-
-Before GemGuard can properly quarantine gems, it needs to know which gems existed before installation. This is called the "baseline". Gems in the baseline are automatically approved; only new versions released after the baseline are quarantined.
-
-### Import Options
-
-| Method | Data Size | Time | What You Get |
-|--------|-----------|------|--------------|
-| **From Specs** (Recommended) | ~30MB | 2-5 min | All gem names/versions, ready-to-use specs files |
-| **Full RubyGems Dump** | ~900MB | 10-30 min | Complete data with accurate release dates |
-| **CSV Baseline** | Varies | 1-2 min | Pre-built baseline (requires external file) |
-
-### Via Admin UI
-
-Navigate to **Admin → Settings** and choose an import option in the "Baseline Database" section.
-
-### Via Rake Tasks
-
-```bash
-# Recommended: Import from RubyGems specs files
-bin/rails baseline:import_from_specs
-
-# Include prerelease versions
-INCLUDE_PRERELEASE=1 bin/rails baseline:import_from_specs
-
-# Full dump with accurate release dates
-bin/rails baseline:import_from_dump
-
-# CSV baseline (if you have a baseline file)
-bin/rails baseline:import
-```
-
-### Which Option Should I Choose?
-
-- **From Specs** (Recommended): Best balance of speed and completeness. Downloads specs files directly from RubyGems, parses all gem versions, and saves the specs for immediate use by the filtering system.
-
-- **Full Dump**: Use if you need accurate original release dates for all gems (for precise quarantine calculations based on when gems were actually published on RubyGems.org).
-
-- **CSV Baseline**: Use if you have a pre-built baseline file from another GemGuard instance or a custom source.
-
-## Background Jobs
-
-GemGuard uses Solid Queue for background job processing. The following jobs run automatically:
-
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| **Sync All Specs** | Every 6 hours | Downloads full gem index, tracks new versions, builds filtered specs |
-| **Sync Latest Specs** | Every 10 minutes | Downloads latest versions index, tracks new versions, builds filtered specs |
-| **Sync Prerelease Specs** | Every hour | Downloads prerelease index, tracks new versions, builds filtered specs |
-| **Approve Expired Quarantine** | Every 5 minutes | Auto-approves `GemVersion` records past quarantine period |
-| **Cleanup Quarantined Versions** | Every hour | Removes expired entries from `quarantined_versions` table |
-| **Clear Finished Jobs** | Every hour | Cleans up completed job records (production only) |
-
-Jobs are configured in `config/recurring.yml`.
-
-## Testing
+### Testing
 
 ```bash
 # Unit tests
@@ -208,7 +283,7 @@ bin/rails test
 bin/rails test:system
 ```
 
-## Code Quality
+### Code Quality
 
 ```bash
 # Security vulnerability scan
@@ -221,13 +296,43 @@ bin/bundler-audit
 bin/rubocop
 ```
 
-## Deployment
+## Rake Tasks
+
+### Baseline Management
+
+```bash
+# Import baseline from RubyGems specs (recommended)
+bin/rails baseline:import
+
+# Force reimport
+bin/rails baseline:reimport
+
+# Check baseline status
+bin/rails baseline:status
+
+# Export baseline to CSV
+bin/rails baseline:export
+```
+
+### Statistics and Cleanup
+
+```bash
+# Show database statistics
+bin/rails gemguard:stats
+
+# Reset database (deletes all data)
+bin/rails gemguard:reset
+```
+
+## Production Deployment
 
 Deployment is handled via Kamal:
 
 ```bash
 bin/kamal deploy
 ```
+
+See `config/deploy.yml` for configuration.
 
 ## License
 

@@ -9,7 +9,7 @@ class Setting < ApplicationRecord
   }.freeze
 
   validates :key, presence: true, uniqueness: true
-  validates :value_type, inclusion: { in: %w[string integer boolean json] }
+  validates :value_type, inclusion: {in: %w[string integer boolean json]}
 
   def typed_value
     case value_type
@@ -21,7 +21,7 @@ class Setting < ApplicationRecord
   end
 
   def typed_value=(new_value)
-    self.value = new_value.is_a?(Hash) || new_value.is_a?(Array) ? new_value.to_json : new_value.to_s
+    self.value = (new_value.is_a?(Hash) || new_value.is_a?(Array)) ? new_value.to_json : new_value.to_s
   end
 
   class << self

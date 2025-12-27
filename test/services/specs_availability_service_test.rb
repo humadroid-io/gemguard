@@ -1,13 +1,17 @@
 require "test_helper"
 
 class SpecsAvailabilityServiceTest < ActiveSupport::TestCase
+  include SpecsTestHelper
+
   setup do
-    @specs_path = Rails.root.join("storage", "specs", "raw")
-    FileUtils.rm_rf(@specs_path)
+    setup_test_specs_directory
+    stub_specs_paths!
+    @specs_path = SpecsTestHelper::TEST_RAW_SPECS_PATH
   end
 
   teardown do
-    FileUtils.rm_rf(@specs_path)
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "available? returns false when no specs exist" do
@@ -68,14 +72,14 @@ class SpecsAvailabilityServiceTest < ActiveSupport::TestCase
   end
 
   test "status_message returns appropriate message for each status" do
-    assert_match /not been synced/, SpecsAvailabilityService.status_message
+    assert_match(/not been synced/, SpecsAvailabilityService.status_message)
 
     FileUtils.mkdir_p(@specs_path)
     File.write(@specs_path.join("specs.4.8.gz"), "test")
-    assert_match /missing/, SpecsAvailabilityService.status_message
+    assert_match(/missing/, SpecsAvailabilityService.status_message)
 
     File.write(@specs_path.join("latest_specs.4.8.gz"), "test")
     File.write(@specs_path.join("prerelease_specs.4.8.gz"), "test")
-    assert_match /ready/, SpecsAvailabilityService.status_message
+    assert_match(/ready/, SpecsAvailabilityService.status_message)
   end
 end

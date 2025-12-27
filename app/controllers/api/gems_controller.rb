@@ -35,7 +35,7 @@ module Api
       version = parts[version_index]
       platform = parts[(version_index + 1)..].join("-").presence || "ruby"
 
-      { name: gem_name, version: version, platform: platform }
+      {name: gem_name, version: version, platform: platform}
     end
 
     def find_or_fetch_gem_version(parsed)
@@ -78,11 +78,15 @@ module Api
       # Mark as tracked if existing package wasn't already
       gem_package.track!
 
-      published_at = Time.parse(version_info["created_at"]) rescue Time.current
+      published_at = begin
+        Time.parse(version_info["created_at"])
+      rescue
+        Time.current
+      end
 
       # Check if actively quarantined (either in QuarantinedVersion table or recently published)
       is_quarantined = QuarantinedVersion.quarantined?(parsed[:name], parsed[:version], parsed[:platform]) ||
-                       published_at > Setting.quarantine_period.ago
+        published_at > Setting.quarantine_period.ago
 
       gem_package.versions.create!(
         version: parsed[:version],
@@ -148,7 +152,7 @@ module Api
       else
         head :bad_gateway
       end
-    rescue StandardError => e
+    rescue => e
       Rails.logger.error("Failed to stream gem: #{e.message}")
       head :bad_gateway
     end

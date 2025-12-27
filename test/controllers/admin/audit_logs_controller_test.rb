@@ -20,7 +20,7 @@ class Admin::AuditLogsControllerTest < ActionDispatch::IntegrationTest
   test "index filters by gem_name" do
     create(:audit_log, gem_name: "nokogiri", version: "1.0.0")
 
-    get admin_audit_logs_path, params: { gem_name: "rails" }
+    get admin_audit_logs_path, params: {gem_name: "rails"}
 
     assert_response :success
     assert_select "td", text: /rails/
@@ -30,7 +30,7 @@ class Admin::AuditLogsControllerTest < ActionDispatch::IntegrationTest
   test "index filters by action_type" do
     create(:audit_log, :spec_request)
 
-    get admin_audit_logs_path, params: { action_type: "download" }
+    get admin_audit_logs_path, params: {action_type: "download"}
 
     assert_response :success
     assert_select ".badge", text: /Download/
@@ -38,8 +38,8 @@ class Admin::AuditLogsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index filters by date range" do
-    old_log = create(:audit_log, gem_name: "old-gem", requested_at: 1.week.ago)
-    recent_log = create(:audit_log, gem_name: "recent-gem", requested_at: Time.current)
+    create(:audit_log, gem_name: "old-gem", requested_at: 1.week.ago)
+    create(:audit_log, gem_name: "recent-gem", requested_at: Time.current)
 
     get admin_audit_logs_path, params: {
       date_from: Date.current.to_s,

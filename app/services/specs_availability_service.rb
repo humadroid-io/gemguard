@@ -34,7 +34,7 @@ class SpecsAvailabilityService
       when :ready
         "Specs are synced and ready"
       when :partial
-        "Some specs are missing: #{missing_specs.join(', ')}"
+        "Some specs are missing: #{missing_specs.join(", ")}"
       when :unavailable
         "Specs have not been synced yet. Run initial sync first."
       end

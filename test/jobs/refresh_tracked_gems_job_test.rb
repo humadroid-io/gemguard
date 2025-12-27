@@ -22,7 +22,7 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
     # Stub API calls for tracked gem only
     stub_request(:get, "https://rubygems.org/api/v1/versions/tracked-gem.json")
       .to_return(status: 200, body: [
-        { "number" => "1.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+        {"number" => "1.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
       ].to_json)
 
     # Should NOT make a request for untracked gem
@@ -40,8 +40,8 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 200, body: [
-        { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-        { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+        {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+        {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
       ].to_json)
 
     assert_difference "GemVersion.count", 1 do
@@ -57,8 +57,8 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 200, body: [
-        { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-        { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.hour.ago.iso8601 }
+        {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+        {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.hour.ago.iso8601}
       ].to_json)
 
     RefreshTrackedGemsJob.perform_now
@@ -73,8 +73,8 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 200, body: [
-        { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-        { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+        {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+        {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
       ].to_json)
 
     RefreshTrackedGemsJob.perform_now
@@ -85,7 +85,7 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
 
   test "handles empty versions list (all yanked)" do
     # RubyGems API simply excludes yanked versions from the response
-    gem_package = create(:gem_package, name: "rails", tracked_at: Time.current)
+    create(:gem_package, name: "rails", tracked_at: Time.current)
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 200, body: [].to_json)
@@ -96,7 +96,7 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
   end
 
   test "handles API failure gracefully" do
-    gem_package = create(:gem_package, name: "rails", tracked_at: Time.current)
+    create(:gem_package, name: "rails", tracked_at: Time.current)
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 500)
@@ -112,8 +112,8 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 200, body: [
-        { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-        { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+        {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+        {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
       ].to_json)
 
     assert_enqueued_with(job: RegenerateFilteredSpecsJob) do
@@ -127,7 +127,7 @@ class RefreshTrackedGemsJobTest < ActiveJob::TestCase
 
     stub_request(:get, "https://rubygems.org/api/v1/versions/rails.json")
       .to_return(status: 200, body: [
-        { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+        {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
       ].to_json)
 
     assert_no_enqueued_jobs(only: RegenerateFilteredSpecsJob) do

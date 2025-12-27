@@ -1,8 +1,74 @@
-# Omakase Ruby styling for Rails
-inherit_gem: { rubocop-rails-omakase: rubocop.yml }
-
-# Overwrite or add rules to create your own house style
+# RuboCop configuration
+# Only Lint, Metrics, Performance, Security cops
+# Style/Layout handled by StandardRB
 #
-# # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
-# Layout/SpaceInsideArrayLiteralBrackets:
-#   Enabled: false
+# Matches neovim config: --only Lint,Metrics,Performance,Security
+
+require:
+  - rubocop-performance
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: enable
+  Exclude:
+    - "db/schema.rb"
+    - "bin/*"
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
+
+# ========================================
+# DISABLED DEPARTMENTS (handled by StandardRB)
+# ========================================
+
+Style:
+  Enabled: false
+
+Layout:
+  Enabled: false
+
+Naming:
+  Enabled: false
+
+Bundler:
+  Enabled: false
+
+Gemspec:
+  Enabled: false
+
+# ========================================
+# ENABLED DEPARTMENTS
+# ========================================
+
+# Lint cops (code quality issues)
+Lint:
+  Enabled: true
+
+# Metrics cops (complexity, length)
+Metrics:
+  Enabled: true
+
+Metrics/BlockLength:
+  Exclude:
+    - "config/**/*"
+    - "test/**/*"
+    - "spec/**/*"
+    - "db/migrate/*"
+    - "lib/tasks/**/*"
+
+Metrics/MethodLength:
+  Max: 20
+
+Metrics/ClassLength:
+  Max: 200
+
+Metrics/AbcSize:
+  Max: 25
+
+# Performance cops
+Performance:
+  Enabled: true
+
+# Security cops
+Security:
+  Enabled: true

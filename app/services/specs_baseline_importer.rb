@@ -1,35 +1,62 @@
 # frozen_string_literal: true
 
+# Imports baseline specs from RubyGems.org
+#
+# This establishes the baseline of "known" gem versions. All versions in the
+# baseline are considered approved - only NEW versions (detected by SyncSpecsJob
+# after baseline import) will be quarantined.
+#
+# IMPORTANT: This service only saves specs files to storage. It does NOT create
+# any GemPackage or GemVersion records. Those are created on-demand when gems
+# are actually requested by Bundler.
 class SpecsBaselineImporter
-  BATCH_SIZE = 1000
+  SPEC_TYPES = {
+    all: "specs.4.8.gz",
+    latest: "latest_specs.4.8.gz",
+    prerelease: "prerelease_specs.4.8.gz"
+  }.freeze
 
   class << self
     def import(include_prerelease: false)
-      Rails.logger.info("SpecsBaselineImporter: Starting import from specs files")
+      Rails.logger.info("SpecsBaselineImporter: Starting baseline import")
 
-      total_count = 0
+      # Download and save all spec types
+      types_to_import = [:all, :latest]
+      types_to_import << :prerelease if include_prerelease
 
-      # Import from main specs (all stable versions)
-      total_count += import_specs(:all)
+      specs_counts = {}
 
-      # Optionally import prereleases
-      if include_prerelease
-        total_count += import_specs(:prerelease)
+      types_to_import.each do |type|
+        count = download_and_save_specs(type)
+        specs_counts[type] = count
       end
 
-      # Save raw specs for future use
-      save_raw_specs
+      # Also fetch prerelease for raw storage even if not "importing" it
+      # (needed for SyncSpecsJob to diff against)
+      unless include_prerelease
+        download_and_save_specs(:prerelease, raw_only: true)
+      end
 
+      # Mark baseline as imported
       Setting.set(:baseline_imported_at, Time.current.iso8601)
       Setting.set(:baseline_source, "specs")
 
-      Rails.logger.info("SpecsBaselineImporter: Completed import of #{total_count} versions")
-      total_count
+      total = specs_counts.values.sum
+      Rails.logger.info("SpecsBaselineImporter: Completed baseline import")
+      Rails.logger.info("  - specs.4.8.gz: #{specs_counts[:all] || 0} versions")
+      Rails.logger.info("  - latest_specs.4.8.gz: #{specs_counts[:latest] || 0} versions")
+      Rails.logger.info("  - prerelease_specs.4.8.gz: #{specs_counts[:prerelease] || 0} versions") if include_prerelease
+
+      total
+    end
+
+    def baseline_imported?
+      Setting.get(:baseline_imported_at).present?
     end
 
     private
 
-    def import_specs(type)
+    def download_and_save_specs(type, raw_only: false)
       Rails.logger.info("SpecsBaselineImporter: Fetching #{type} specs from RubyGems...")
 
       data = RubygemsClient.fetch_specs(type)
@@ -38,102 +65,49 @@ class SpecsBaselineImporter
         return 0
       end
 
+      # Parse to get count for logging
       specs = RubygemsClient.parse_specs(data)
-      Rails.logger.info("SpecsBaselineImporter: Parsed #{specs.size} entries from #{type} specs")
+      count = specs.size
 
-      import_specs_data(specs, data, type)
-    end
+      Rails.logger.info("SpecsBaselineImporter: Downloaded #{count} entries from #{type} specs")
 
-    def import_specs_data(specs, raw_data, type)
-      # Group specs by gem name for efficient batch processing
-      grouped = specs.group_by { |name, _version, _platform| name }
+      # Save raw specs (for SyncSpecsJob to diff against)
+      save_specs_file(raw_specs_path, type, data)
 
-      Rails.logger.info("SpecsBaselineImporter: Processing #{grouped.size} unique gems...")
-
-      imported_count = 0
-      gem_names = grouped.keys
-
-      gem_names.each_slice(BATCH_SIZE) do |batch_names|
-        # Find or create gem packages in batch
-        existing_packages = GemPackage.where(name: batch_names).index_by(&:name)
-
-        batch_names.each do |gem_name|
-          gem_package = existing_packages[gem_name] || GemPackage.create!(name: gem_name)
-
-          # Get existing versions for this package
-          existing_versions = gem_package.versions.pluck(:version, :platform).to_set
-
-          # Create missing versions
-          versions_to_create = []
-          grouped[gem_name].each do |_name, version, platform|
-            version_str = version.to_s
-            platform_str = platform.to_s.presence || "ruby"
-
-            next if existing_versions.include?([version_str, platform_str])
-
-            versions_to_create << {
-              gem_package_id: gem_package.id,
-              version: version_str,
-              platform: platform_str,
-              status: :approved,
-              first_seen_at: Time.current
-            }
-          end
-
-          if versions_to_create.any?
-            GemVersion.insert_all(versions_to_create)
-            imported_count += versions_to_create.size
-          end
-        end
-
-        # Log progress
-        processed = gem_names.index(batch_names.last).to_i + 1
-        Rails.logger.info("SpecsBaselineImporter: Processed #{processed}/#{gem_names.size} gems (#{imported_count} versions)")
+      # Save filtered specs (for serving to Bundler)
+      # During baseline import, all versions are approved so filtered = raw
+      unless raw_only
+        save_specs_file(filtered_specs_path, type, data)
       end
 
-      # Save raw specs
-      save_raw_spec_file(type, raw_data)
-
-      imported_count
+      count
     end
 
-    def save_raw_specs
-      # This ensures we have the raw specs for filtering
-      %i[all latest prerelease].each do |type|
-        next if raw_spec_exists?(type)
+    def save_specs_file(base_path, type, data)
+      filename = SPEC_TYPES[type]
+      path = base_path.join(filename)
 
-        data = RubygemsClient.fetch_specs(type)
-        save_raw_spec_file(type, data) if data
-      end
+      FileUtils.mkdir_p(base_path)
+      atomic_write(path, data)
+
+      Rails.logger.info("SpecsBaselineImporter: Saved specs to #{path}")
     end
 
-    def save_raw_spec_file(type, data)
-      return unless data
-
-      filename = case type
-      when :latest then "latest_specs.4.8.gz"
-      when :prerelease then "prerelease_specs.4.8.gz"
-      else "specs.4.8.gz"
-      end
-
-      path = raw_specs_path.join(filename)
-      FileUtils.mkdir_p(raw_specs_path)
-      File.binwrite(path, data)
-      Rails.logger.info("SpecsBaselineImporter: Saved raw specs to #{path}")
-    end
-
-    def raw_spec_exists?(type)
-      filename = case type
-      when :latest then "latest_specs.4.8.gz"
-      when :prerelease then "prerelease_specs.4.8.gz"
-      else "specs.4.8.gz"
-      end
-
-      File.exist?(raw_specs_path.join(filename))
+    def atomic_write(path, data)
+      temp_path = "#{path}.tmp.#{Process.pid}"
+      File.binwrite(temp_path, data)
+      File.rename(temp_path, path)
+    rescue => e
+      File.delete(temp_path) if File.exist?(temp_path)
+      raise e
     end
 
     def raw_specs_path
       Rails.root.join("storage", "specs", "raw")
+    end
+
+    def filtered_specs_path
+      Rails.root.join("storage", "specs")
     end
   end
 end

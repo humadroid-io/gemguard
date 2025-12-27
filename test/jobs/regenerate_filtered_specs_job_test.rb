@@ -1,10 +1,13 @@
 require "test_helper"
 
 class RegenerateFilteredSpecsJobTest < ActiveJob::TestCase
+  include SpecsTestHelper
+
   setup do
-    @specs_dir = Rails.root.join("storage", "specs")
-    @raw_specs_dir = @specs_dir.join("raw")
-    FileUtils.mkdir_p(@raw_specs_dir)
+    setup_test_specs_directory
+    stub_specs_paths!
+    @specs_dir = SpecsTestHelper::TEST_SPECS_PATH
+    @raw_specs_dir = SpecsTestHelper::TEST_RAW_SPECS_PATH
 
     # Create sample raw specs
     @sample_specs = [
@@ -13,11 +16,12 @@ class RegenerateFilteredSpecsJobTest < ActiveJob::TestCase
       ["nokogiri", Gem::Version.new("1.15.0"), "ruby"]
     ]
 
-    save_raw_specs(:all, @sample_specs)
+    save_test_raw_specs(:all, gzipped_specs(@sample_specs))
   end
 
   teardown do
-    FileUtils.rm_rf(@specs_dir)
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "regenerates filtered specs without quarantined versions" do
@@ -56,21 +60,6 @@ class RegenerateFilteredSpecsJobTest < ActiveJob::TestCase
 
   private
 
-  def save_raw_specs(type, specs)
-    filename = {
-      all: "specs.4.8.gz",
-      latest: "latest_specs.4.8.gz",
-      prerelease: "prerelease_specs.4.8.gz"
-    }[type]
-
-    io = StringIO.new
-    gz = Zlib::GzipWriter.new(io)
-    gz.write(Marshal.dump(specs))
-    gz.close
-
-    File.binwrite(@raw_specs_dir.join(filename), io.string)
-  end
-
   def load_filtered_specs(type)
     filename = {
       all: "specs.4.8.gz",
@@ -81,8 +70,6 @@ class RegenerateFilteredSpecsJobTest < ActiveJob::TestCase
     path = @specs_dir.join(filename)
     return [] unless File.exist?(path)
 
-    data = File.binread(path)
-    gz = Zlib::GzipReader.new(StringIO.new(data))
-    Marshal.load(gz.read)
+    parse_gzipped_specs(File.binread(path))
   end
 end

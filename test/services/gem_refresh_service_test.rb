@@ -27,8 +27,8 @@ class GemRefreshServiceTest < ActiveSupport::TestCase
   test "creates new versions from API" do
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-      { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+      {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
     ])
 
     service = GemRefreshService.new(@gem_package)
@@ -47,8 +47,8 @@ class GemRefreshServiceTest < ActiveSupport::TestCase
 
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-      { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+      {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
     ])
 
     service = GemRefreshService.new(@gem_package)
@@ -66,7 +66,7 @@ class GemRefreshServiceTest < ActiveSupport::TestCase
 
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => published_time.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => published_time.iso8601}
     ])
 
     service = GemRefreshService.new(@gem_package)
@@ -79,7 +79,7 @@ class GemRefreshServiceTest < ActiveSupport::TestCase
   test "quarantines recently published versions" do
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.2.0", "platform" => "ruby", "created_at" => 1.hour.ago.iso8601 }
+      {"number" => "7.2.0", "platform" => "ruby", "created_at" => 1.hour.ago.iso8601}
     ])
 
     service = GemRefreshService.new(@gem_package)
@@ -93,7 +93,7 @@ class GemRefreshServiceTest < ActiveSupport::TestCase
   test "approves old versions automatically" do
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "6.0.0", "platform" => "ruby", "created_at" => 2.years.ago.iso8601 }
+      {"number" => "6.0.0", "platform" => "ruby", "created_at" => 2.years.ago.iso8601}
     ])
 
     service = GemRefreshService.new(@gem_package)

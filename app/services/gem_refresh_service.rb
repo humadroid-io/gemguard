@@ -34,7 +34,7 @@ class GemRefreshService
       homepage_url: gem_info["homepage_uri"],
       downloads_count: gem_info["downloads"]
     )
-  rescue StandardError => e
+  rescue => e
     errors << "Failed to update gem info: #{e.message}"
   end
 
@@ -55,7 +55,7 @@ class GemRefreshService
     response = HTTParty.get(
       "https://rubygems.org/api/v1/versions/#{gem_package.name}.json",
       timeout: 30,
-      headers: { "User-Agent" => "GemGuard/1.0" }
+      headers: {"User-Agent" => "GemGuard/1.0"}
     )
 
     unless response.success?
@@ -67,7 +67,7 @@ class GemRefreshService
   rescue JSON::ParserError => e
     errors << "Invalid JSON response: #{e.message}"
     nil
-  rescue StandardError => e
+  rescue => e
     errors << "Failed to fetch versions: #{e.message}"
     nil
   end

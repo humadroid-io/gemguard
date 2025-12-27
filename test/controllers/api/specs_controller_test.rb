@@ -2,13 +2,17 @@ require "test_helper"
 require "webmock/minitest"
 
 class Api::SpecsControllerTest < ActionDispatch::IntegrationTest
+  include SpecsTestHelper
+
   # Disable parallelization due to file system dependencies
   parallelize(workers: 1)
 
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
-    @specs_path = Rails.root.join("storage", "specs")
-    FileUtils.mkdir_p(@specs_path)
+    setup_test_specs_directory
+    stub_specs_paths!
+    @specs_path = SpecsTestHelper::TEST_SPECS_PATH
+    @raw_specs_path = SpecsTestHelper::TEST_RAW_SPECS_PATH
 
     # Stub rubygems.org requests for when sync is triggered
     stub_request(:get, "https://rubygems.org/specs.4.8.gz")
@@ -21,7 +25,8 @@ class Api::SpecsControllerTest < ActionDispatch::IntegrationTest
 
   teardown do
     WebMock.allow_net_connect!
-    FileUtils.rm_rf(@specs_path)
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "index returns specs file when cached" do
@@ -182,26 +187,12 @@ class Api::SpecsControllerTest < ActionDispatch::IntegrationTest
 
   private
 
-  def parse_gzipped_specs(data)
-    gz = Zlib::GzipReader.new(StringIO.new(data))
-    Marshal.load(gz.read)
-  end
-
   def create_specs_file(filename)
-    File.binwrite(@specs_path.join(filename), "test content")
-  end
-
-  def gzipped_specs(specs)
-    io = StringIO.new
-    gz = Zlib::GzipWriter.new(io)
-    gz.write(Marshal.dump(specs))
-    gz.close
-    io.string
+    File.binwrite(@specs_path.join(filename), gzipped_specs([["test", Gem::Version.new("1.0.0"), "ruby"]]))
   end
 
   def save_raw_specs(data)
-    raw_path = @specs_path.join("raw")
-    FileUtils.mkdir_p(raw_path)
-    File.binwrite(raw_path.join("specs.4.8.gz"), data)
+    FileUtils.mkdir_p(@raw_specs_path)
+    File.binwrite(@raw_specs_path.join("specs.4.8.gz"), data)
   end
 end

@@ -45,7 +45,7 @@ class SettingTest < ActiveSupport::TestCase
 
   test "typed_value returns parsed JSON for json type" do
     setting = build(:setting, :json, value: '{"key": "value"}')
-    assert_equal({ "key" => "value" }, setting.typed_value)
+    assert_equal({"key" => "value"}, setting.typed_value)
   end
 
   test "typed_value= converts to string" do
@@ -56,7 +56,7 @@ class SettingTest < ActiveSupport::TestCase
 
   test "typed_value= converts hash to JSON" do
     setting = build(:setting, value_type: "json")
-    setting.typed_value = { key: "value" }
+    setting.typed_value = {key: "value"}
     assert_equal '{"key":"value"}', setting.value
   end
 

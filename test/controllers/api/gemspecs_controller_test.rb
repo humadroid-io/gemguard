@@ -2,12 +2,16 @@ require "test_helper"
 require "webmock/minitest"
 
 class Api::GemspecsControllerTest < ActionDispatch::IntegrationTest
+  include SpecsTestHelper
+
   # Disable parallelization due to file system dependencies
   parallelize(workers: 1)
 
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
-    @specs_path = Rails.root.join("storage", "specs", "quick")
+    setup_test_specs_directory
+    stub_specs_paths!
+    @specs_path = SpecsTestHelper::TEST_SPECS_PATH.join("quick")
     FileUtils.mkdir_p(@specs_path)
 
     @gem_package = create(:gem_package, name: "rails")
@@ -15,7 +19,8 @@ class Api::GemspecsControllerTest < ActionDispatch::IntegrationTest
 
   teardown do
     WebMock.allow_net_connect!
-    FileUtils.rm_rf(Rails.root.join("storage", "specs"))
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "show returns 404 for non-existent gemspec" do

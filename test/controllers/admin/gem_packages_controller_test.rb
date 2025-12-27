@@ -2,20 +2,24 @@ require "test_helper"
 require "webmock/minitest"
 
 class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
+  include SpecsTestHelper
+
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
+    setup_test_specs_directory
+    stub_specs_paths!
     @gem_package = create(:gem_package, name: "rails")
     @version = create(:gem_version, :approved, gem_package: @gem_package, version: "7.0.0")
 
     # Create raw specs to enable approve/block actions
-    @specs_path = Rails.root.join("storage", "specs", "raw")
-    FileUtils.mkdir_p(@specs_path)
+    @specs_path = SpecsTestHelper::TEST_RAW_SPECS_PATH
     File.write(@specs_path.join("specs.4.8.gz"), "test")
   end
 
   teardown do
     WebMock.allow_net_connect!
-    FileUtils.rm_rf(@specs_path)
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "index returns success" do
@@ -31,7 +35,7 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
   test "index filters by search query" do
     create(:gem_package, name: "nokogiri")
 
-    get admin_gem_packages_path, params: { search: "rails" }
+    get admin_gem_packages_path, params: {search: "rails"}
 
     assert_response :success
     assert_select "td", text: /rails/
@@ -42,7 +46,7 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
     quarantined_pkg = create(:gem_package, name: "risky-gem")
     create(:gem_version, :quarantined, gem_package: quarantined_pkg)
 
-    get admin_gem_packages_path, params: { status: "quarantined" }
+    get admin_gem_packages_path, params: {status: "quarantined"}
 
     assert_response :success
     assert_select "td", text: /risky-gem/
@@ -128,13 +132,13 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
   test "refresh updates gem info from RubyGems" do
     stub_gem_info("rails", info: "Updated info", homepage_uri: "https://new-url.com", downloads: 999)
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
     ])
 
     post refresh_admin_gem_package_path(@gem_package)
 
     assert_redirected_to admin_gem_package_path(@gem_package)
-    assert_match /refreshed/, flash[:notice]
+    assert_match(/refreshed/, flash[:notice])
 
     @gem_package.reload
     assert_equal "Updated info", @gem_package.info
@@ -143,22 +147,22 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
   test "refresh creates new versions" do
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-      { "number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+      {"number" => "7.1.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
     ])
 
     assert_difference "GemVersion.count", 1 do
       post refresh_admin_gem_package_path(@gem_package)
     end
 
-    assert_match /1 new versions/, flash[:notice]
+    assert_match(/1 new versions/, flash[:notice])
   end
 
   test "refresh enqueues spec regeneration when new versions found" do
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 },
-      { "number" => "7.2.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601},
+      {"number" => "7.2.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
     ])
 
     assert_enqueued_jobs 3, only: RegenerateFilteredSpecsJob do
@@ -169,7 +173,7 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
   test "refresh does not regenerate specs when no new versions" do
     stub_gem_info("rails")
     stub_versions("rails", [
-      { "number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601 }
+      {"number" => "7.0.0", "platform" => "ruby", "created_at" => 1.year.ago.iso8601}
     ])
 
     assert_no_enqueued_jobs only: RegenerateFilteredSpecsJob do
@@ -185,7 +189,7 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
     post refresh_admin_gem_package_path(@gem_package)
 
     assert_redirected_to admin_gem_package_path(@gem_package)
-    assert_match /failed/, flash[:alert]
+    assert_match(/failed/, flash[:alert])
   end
 
   test "show displays refresh button" do
@@ -218,7 +222,7 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
     post approve_version_admin_gem_package_path(@gem_package, version_id: quarantined.id)
 
     assert_redirected_to admin_gem_package_path(@gem_package)
-    assert_match /Cannot modify gem status/, flash[:alert]
+    assert_match(/Cannot modify gem status/, flash[:alert])
     assert quarantined.reload.quarantined?
   end
 
@@ -228,7 +232,7 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
     post block_version_admin_gem_package_path(@gem_package, version_id: @version.id)
 
     assert_redirected_to admin_gem_package_path(@gem_package)
-    assert_match /Cannot modify gem status/, flash[:alert]
+    assert_match(/Cannot modify gem status/, flash[:alert])
     assert @version.reload.approved?
   end
 

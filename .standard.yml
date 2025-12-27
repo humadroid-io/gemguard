@@ -1,0 +1,11 @@
+# StandardRB configuration
+# Used for formatting (style/layout) - handles all Style/* cops
+# https://github.com/standardrb/standard
+
+ruby_version: 3.4
+
+ignore:
+  - "db/schema.rb"
+  - "bin/*"
+  - "vendor/**/*"
+  - "node_modules/**/*"

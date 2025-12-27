@@ -2,20 +2,60 @@ require "test_helper"
 require "webmock/minitest"
 
 class ImportSpecsBaselineJobTest < ActiveJob::TestCase
+  include SpecsTestHelper
+
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
-    @specs_path = Rails.root.join("storage", "specs", "raw")
-    FileUtils.rm_rf(@specs_path)
+    setup_test_specs_directory
+    stub_specs_paths!
+    @specs_path = SpecsTestHelper::TEST_SPECS_PATH
 
     Setting.set(:baseline_imported_at, nil)
+    Setting.set(:baseline_source, nil)
   end
 
   teardown do
     WebMock.allow_net_connect!
-    FileUtils.rm_rf(@specs_path)
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
-  test "imports specs and enqueues spec regeneration" do
+  test "imports specs and marks baseline as imported" do
+    stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:latest, [])
+    stub_specs(:prerelease, [])
+
+    ImportSpecsBaselineJob.perform_now
+
+    assert Setting.baseline_imported?
+    assert_equal "specs", Setting.get(:baseline_source)
+  end
+
+  test "does NOT create database records" do
+    stub_specs(:all, [
+      ["rails", Gem::Version.new("7.0.0"), "ruby"],
+      ["rack", Gem::Version.new("2.0.0"), "ruby"]
+    ])
+    stub_specs(:latest, [])
+    stub_specs(:prerelease, [])
+
+    assert_no_difference ["GemPackage.count", "GemVersion.count"] do
+      ImportSpecsBaselineJob.perform_now
+    end
+  end
+
+  test "saves specs files to storage" do
+    stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:latest, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:prerelease, [])
+
+    ImportSpecsBaselineJob.perform_now
+
+    assert File.exist?(@specs_path.join("raw", "specs.4.8.gz"))
+    assert File.exist?(@specs_path.join("specs.4.8.gz"))
+  end
+
+  test "enqueues spec regeneration after import" do
     stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
     stub_specs(:latest, [])
     stub_specs(:prerelease, [])
@@ -23,8 +63,6 @@ class ImportSpecsBaselineJobTest < ActiveJob::TestCase
     assert_enqueued_jobs 3, only: RegenerateFilteredSpecsJob do
       ImportSpecsBaselineJob.perform_now
     end
-
-    assert GemPackage.exists?(name: "rails")
   end
 
   test "passes include_prerelease option" do
@@ -34,7 +72,8 @@ class ImportSpecsBaselineJobTest < ActiveJob::TestCase
 
     ImportSpecsBaselineJob.perform_now(include_prerelease: true)
 
-    assert GemVersion.exists?(version: "8.0.0.beta1")
+    # Prerelease specs should be in filtered directory (not just raw)
+    assert File.exist?(@specs_path.join("prerelease_specs.4.8.gz"))
   end
 
   private

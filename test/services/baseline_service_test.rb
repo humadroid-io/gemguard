@@ -4,84 +4,46 @@ require "test_helper"
 require "webmock/minitest"
 
 class BaselineServiceTest < ActiveSupport::TestCase
+  include SpecsTestHelper
+
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
+    setup_test_specs_directory
+    stub_specs_paths!
+    @specs_path = SpecsTestHelper::TEST_RAW_SPECS_PATH
+
+    # Clear baseline settings
+    Setting.set(:baseline_imported_at, nil)
+    Setting.set(:baseline_source, nil)
   end
 
   teardown do
     WebMock.allow_net_connect!
-  end
-
-  test "import_from_csv creates approved gem versions" do
-    csv_data = <<~CSV
-      name,version,platform
-      rails,7.0.0,ruby
-      nokogiri,1.15.0,ruby
-      nokogiri,1.15.0,x86_64-linux
-    CSV
-
-    count = BaselineService.import_from_csv(csv_data)
-
-    assert_equal 3, count
-    assert_equal 2, GemPackage.count
-    assert_equal 3, GemVersion.count
-
-    rails_version = GemVersion.joins(:gem_package).find_by(gem_packages: { name: "rails" })
-    assert rails_version.approved?
-
-    nokogiri_versions = GemVersion.joins(:gem_package).where(gem_packages: { name: "nokogiri" })
-    assert_equal 2, nokogiri_versions.count
-    assert nokogiri_versions.all?(&:approved?)
-  end
-
-  test "import_from_csv skips existing versions" do
-    gem_package = create(:gem_package, name: "rails")
-    create(:gem_version, gem_package: gem_package, version: "7.0.0", status: :blocked)
-
-    csv_data = <<~CSV
-      name,version,platform
-      rails,7.0.0,ruby
-      rails,7.1.0,ruby
-    CSV
-
-    count = BaselineService.import_from_csv(csv_data)
-
-    assert_equal 2, count
-    assert_equal 2, GemVersion.count
-
-    # Original blocked version should stay blocked
-    original = GemVersion.find_by(version: "7.0.0")
-    assert original.blocked?
-
-    # New version should be approved
-    new_version = GemVersion.find_by(version: "7.1.0")
-    assert new_version.approved?
-  end
-
-  test "import_from_gzipped_csv decompresses and imports" do
-    csv_data = <<~CSV
-      name,version,platform
-      puma,6.0.0,ruby
-    CSV
-
-    gzipped = gzip_data(csv_data)
-    count = BaselineService.import_from_gzipped_csv(gzipped)
-
-    assert_equal 1, count
-    assert GemPackage.exists?(name: "puma")
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "baseline_imported? returns false by default" do
     refute BaselineService.baseline_imported?
   end
 
-  test "mark_baseline_imported! sets timestamp" do
-    refute BaselineService.baseline_imported?
-
-    BaselineService.mark_baseline_imported!
+  test "baseline_imported? returns true after baseline import" do
+    Setting.set(:baseline_imported_at, Time.current.iso8601)
 
     assert BaselineService.baseline_imported?
-    assert Setting.baseline_imported_at.present?
+  end
+
+  test "baseline_imported_at returns the timestamp" do
+    timestamp = Time.current.iso8601
+    Setting.set(:baseline_imported_at, timestamp)
+
+    assert_equal timestamp, BaselineService.baseline_imported_at
+  end
+
+  test "baseline_source returns the source" do
+    Setting.set(:baseline_source, "specs")
+
+    assert_equal "specs", BaselineService.baseline_source
   end
 
   test "generate_baseline creates gzipped csv file" do
@@ -112,18 +74,53 @@ class BaselineServiceTest < ActiveSupport::TestCase
     assert_includes content, "rails,7.0.0,ruby"
     assert_includes content, "nokogiri,1.15.0,x86_64-linux"
   ensure
-    File.delete(output_path) if File.exist?(output_path)
+    File.delete(output_path) if output_path && File.exist?(output_path)
+  end
+
+  test "generate_baseline_from_local uses local specs files" do
+    # Create local specs files
+    FileUtils.mkdir_p(@specs_path)
+
+    specs = [
+      ["rails", Gem::Version.new("7.0.0"), "ruby"],
+      ["rack", Gem::Version.new("2.0.0"), "ruby"]
+    ]
+
+    File.binwrite(@specs_path.join("specs.4.8.gz"), build_gzipped_specs(specs))
+
+    output_path = Rails.root.join("tmp", "test_local_baseline.csv.gz")
+
+    count = BaselineService.generate_baseline_from_local(output_path)
+    assert_equal 2, count
+
+    content = Zlib::GzipReader.open(output_path, &:read)
+    assert_includes content, "rails,7.0.0,ruby"
+    assert_includes content, "rack,2.0.0,ruby"
+  ensure
+    File.delete(output_path) if output_path && File.exist?(output_path)
+  end
+
+  test "generate_baseline does NOT create database records" do
+    specs = [["rails", Gem::Version.new("7.0.0"), "ruby"]]
+    gzipped_specs = build_gzipped_specs(specs)
+
+    stub_request(:get, "https://rubygems.org/specs.4.8.gz")
+      .to_return(status: 200, body: gzipped_specs)
+    stub_request(:get, "https://rubygems.org/latest_specs.4.8.gz")
+      .to_return(status: 200, body: gzipped_specs)
+    stub_request(:get, "https://rubygems.org/prerelease_specs.4.8.gz")
+      .to_return(status: 200, body: gzipped_specs)
+
+    output_path = Rails.root.join("tmp", "test_baseline.csv.gz")
+
+    assert_no_difference ["GemPackage.count", "GemVersion.count"] do
+      BaselineService.generate_baseline(output_path)
+    end
+  ensure
+    File.delete(output_path) if output_path && File.exist?(output_path)
   end
 
   private
-
-  def gzip_data(data)
-    io = StringIO.new
-    gz = Zlib::GzipWriter.new(io)
-    gz.write(data)
-    gz.close
-    io.string
-  end
 
   def build_gzipped_specs(specs)
     io = StringIO.new

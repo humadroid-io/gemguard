@@ -1,17 +1,21 @@
 require "test_helper"
 
 class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
+  include SpecsTestHelper
+
   setup do
+    setup_test_specs_directory
+    stub_specs_paths!
     @quarantined = create(:quarantined_version, name: "test-gem", version: "1.0.0")
 
     # Create raw specs to enable approve/block actions
-    @specs_path = Rails.root.join("storage", "specs", "raw")
-    FileUtils.mkdir_p(@specs_path)
+    @specs_path = SpecsTestHelper::TEST_RAW_SPECS_PATH
     File.write(@specs_path.join("specs.4.8.gz"), "test")
   end
 
   teardown do
-    FileUtils.rm_rf(@specs_path)
+    restore_specs_paths!
+    teardown_test_specs_directory
   end
 
   test "index returns success" do
@@ -29,7 +33,7 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
   test "index filters by search" do
     create(:quarantined_version, name: "other-gem", version: "2.0.0")
 
-    get admin_quarantined_versions_path, params: { search: "test-gem" }
+    get admin_quarantined_versions_path, params: {search: "test-gem"}
 
     assert_response :success
     assert_select "td", text: /test-gem/
@@ -37,9 +41,9 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index filters by active status" do
-    expired = create(:quarantined_version, :expired, name: "old-gem", version: "1.0.0")
+    create(:quarantined_version, :expired, name: "old-gem", version: "1.0.0")
 
-    get admin_quarantined_versions_path, params: { status: "active" }
+    get admin_quarantined_versions_path, params: {status: "active"}
 
     assert_response :success
     assert_select "td", text: /test-gem/
@@ -47,9 +51,9 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index filters by expired status" do
-    expired = create(:quarantined_version, :expired, name: "old-gem", version: "1.0.0")
+    create(:quarantined_version, :expired, name: "old-gem", version: "1.0.0")
 
-    get admin_quarantined_versions_path, params: { status: "expired" }
+    get admin_quarantined_versions_path, params: {status: "expired"}
 
     assert_response :success
     assert_select "td", text: /old-gem/
@@ -121,8 +125,8 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
 
   test "approve_all_expired approves only expired versions" do
     active = @quarantined # This is active (created recently)
-    expired1 = create(:quarantined_version, :expired, name: "old-gem-1", version: "1.0.0")
-    expired2 = create(:quarantined_version, :expired, name: "old-gem-2", version: "1.0.0")
+    create(:quarantined_version, :expired, name: "old-gem-1", version: "1.0.0")
+    create(:quarantined_version, :expired, name: "old-gem-2", version: "1.0.0")
 
     assert_difference "GemVersion.count", 2 do
       assert_difference "QuarantinedVersion.count", -2 do
@@ -164,7 +168,7 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
     post approve_admin_quarantined_version_path(@quarantined)
 
     assert_redirected_to admin_quarantined_versions_path
-    assert_match /Cannot modify gem status/, flash[:alert]
+    assert_match(/Cannot modify gem status/, flash[:alert])
     assert QuarantinedVersion.exists?(id: @quarantined.id)
   end
 
@@ -174,7 +178,7 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
     post block_admin_quarantined_version_path(@quarantined)
 
     assert_redirected_to admin_quarantined_versions_path
-    assert_match /Cannot modify gem status/, flash[:alert]
+    assert_match(/Cannot modify gem status/, flash[:alert])
   end
 
   test "destroy blocked when specs not available" do
@@ -183,7 +187,7 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
     delete admin_quarantined_version_path(@quarantined)
 
     assert_redirected_to admin_quarantined_versions_path
-    assert_match /Cannot modify gem status/, flash[:alert]
+    assert_match(/Cannot modify gem status/, flash[:alert])
     assert QuarantinedVersion.exists?(id: @quarantined.id)
   end
 
@@ -194,7 +198,7 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
     post approve_all_expired_admin_quarantined_versions_path
 
     assert_redirected_to admin_quarantined_versions_path
-    assert_match /Cannot modify gem status/, flash[:alert]
+    assert_match(/Cannot modify gem status/, flash[:alert])
   end
 
   test "index displays warning when specs not available" do

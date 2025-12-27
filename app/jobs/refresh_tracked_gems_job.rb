@@ -80,13 +80,13 @@ class RefreshTrackedGemsJob < ApplicationJob
     response = HTTParty.get(
       "https://rubygems.org/api/v1/versions/#{gem_name}.json",
       timeout: 10,
-      headers: { "User-Agent" => "GemGuard/1.0" }
+      headers: {"User-Agent" => "GemGuard/1.0"}
     )
 
     return nil unless response.success?
 
     JSON.parse(response.body)
-  rescue JSON::ParserError, StandardError => e
+  rescue => e
     Rails.logger.warn("RefreshTrackedGemsJob: Failed to fetch versions for #{gem_name}: #{e.message}")
     nil
   end

@@ -129,13 +129,13 @@ module Api
 
     def fetch_upstream(url)
       HTTParty.get(url, timeout: 30, headers: upstream_headers)
-    rescue StandardError => e
+    rescue => e
       Rails.logger.error("Failed to fetch #{url}: #{e.message}")
       nil
     end
 
     def upstream_headers
-      headers = { "User-Agent" => "GemGuard/1.0" }
+      headers = {"User-Agent" => "GemGuard/1.0"}
       headers["If-Modified-Since"] = request.headers["If-Modified-Since"] if request.headers["If-Modified-Since"]
       headers["If-None-Match"] = request.headers["If-None-Match"] if request.headers["If-None-Match"]
       headers

@@ -3,7 +3,7 @@ class QuarantinedVersion < ApplicationRecord
   validates :version, presence: true
   validates :platform, presence: true
   validates :first_seen_at, presence: true
-  validates :version, uniqueness: { scope: [:name, :platform] }
+  validates :version, uniqueness: {scope: [:name, :platform]}
 
   scope :active, -> { where("first_seen_at > ?", Setting.quarantine_period.ago) }
   scope :expired, -> { where("first_seen_at <= ?", Setting.quarantine_period.ago) }

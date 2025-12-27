@@ -1,7 +1,7 @@
 class QuarantineRule < ApplicationRecord
   belongs_to :gem_package, optional: true
 
-  enum :rule_type, { time_based: 0, version_pattern: 1, manual: 2 }
+  enum :rule_type, {time_based: 0, version_pattern: 1, manual: 2}
 
   validates :rule_type, presence: true
 

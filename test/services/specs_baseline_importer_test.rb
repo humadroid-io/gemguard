@@ -4,8 +4,10 @@ require "webmock/minitest"
 class SpecsBaselineImporterTest < ActiveSupport::TestCase
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
-    @specs_path = Rails.root.join("storage", "specs", "raw")
-    FileUtils.rm_rf(@specs_path)
+    @raw_specs_path = Rails.root.join("storage", "specs", "raw")
+    @filtered_specs_path = Rails.root.join("storage", "specs")
+    FileUtils.rm_rf(@raw_specs_path)
+    FileUtils.rm_rf(@filtered_specs_path)
 
     # Clear any existing baseline
     Setting.set(:baseline_imported_at, nil)
@@ -14,10 +16,11 @@ class SpecsBaselineImporterTest < ActiveSupport::TestCase
 
   teardown do
     WebMock.allow_net_connect!
-    FileUtils.rm_rf(@specs_path)
+    FileUtils.rm_rf(@raw_specs_path)
+    FileUtils.rm_rf(@filtered_specs_path)
   end
 
-  test "imports gems from specs files" do
+  test "does NOT create database records" do
     stub_specs(:all, [
       ["rails", Gem::Version.new("7.0.0"), "ruby"],
       ["rails", Gem::Version.new("7.1.0"), "ruby"],
@@ -26,73 +29,24 @@ class SpecsBaselineImporterTest < ActiveSupport::TestCase
     stub_specs(:latest, [])
     stub_specs(:prerelease, [])
 
-    count = SpecsBaselineImporter.import
-
-    assert_equal 3, count
-    assert_equal 2, GemPackage.count
-    assert GemPackage.exists?(name: "rails")
-    assert GemPackage.exists?(name: "rack")
-    assert_equal 2, GemPackage.find_by(name: "rails").versions.count
+    assert_no_difference ["GemPackage.count", "GemVersion.count"] do
+      SpecsBaselineImporter.import
+    end
   end
 
-  test "creates versions as approved" do
-    stub_specs(:all, [
-      ["rails", Gem::Version.new("7.0.0"), "ruby"]
-    ])
-    stub_specs(:latest, [])
-    stub_specs(:prerelease, [])
-
-    SpecsBaselineImporter.import
-
-    version = GemVersion.first
-    assert version.approved?
-  end
-
-  test "does not duplicate existing versions" do
-    gem_package = create(:gem_package, name: "rails")
-    create(:gem_version, gem_package: gem_package, version: "7.0.0", platform: "ruby")
-
+  test "returns count of specs entries" do
     stub_specs(:all, [
       ["rails", Gem::Version.new("7.0.0"), "ruby"],
-      ["rails", Gem::Version.new("7.1.0"), "ruby"]
+      ["rails", Gem::Version.new("7.1.0"), "ruby"],
+      ["rack", Gem::Version.new("2.0.0"), "ruby"]
     ])
-    stub_specs(:latest, [])
+    stub_specs(:latest, [["rails", Gem::Version.new("7.1.0"), "ruby"]])
     stub_specs(:prerelease, [])
 
     count = SpecsBaselineImporter.import
 
-    assert_equal 1, count # Only new version
-    assert_equal 2, gem_package.versions.count
-  end
-
-  test "imports prerelease versions when requested" do
-    stub_specs(:all, [
-      ["rails", Gem::Version.new("7.0.0"), "ruby"]
-    ])
-    stub_specs(:latest, [])
-    stub_specs(:prerelease, [
-      ["rails", Gem::Version.new("8.0.0.beta1"), "ruby"]
-    ])
-
-    count = SpecsBaselineImporter.import(include_prerelease: true)
-
-    assert_equal 2, count
-    assert GemVersion.exists?(version: "8.0.0.beta1")
-  end
-
-  test "does not import prereleases by default" do
-    stub_specs(:all, [
-      ["rails", Gem::Version.new("7.0.0"), "ruby"]
-    ])
-    stub_specs(:latest, [])
-    stub_specs(:prerelease, [
-      ["rails", Gem::Version.new("8.0.0.beta1"), "ruby"]
-    ])
-
-    count = SpecsBaselineImporter.import(include_prerelease: false)
-
-    assert_equal 1, count
-    assert_not GemVersion.exists?(version: "8.0.0.beta1")
+    # Count is sum of all specs (not deduplicated)
+    assert_equal 4, count
   end
 
   test "saves raw specs files" do
@@ -102,9 +56,21 @@ class SpecsBaselineImporterTest < ActiveSupport::TestCase
 
     SpecsBaselineImporter.import
 
-    assert File.exist?(@specs_path.join("specs.4.8.gz"))
-    assert File.exist?(@specs_path.join("latest_specs.4.8.gz"))
-    assert File.exist?(@specs_path.join("prerelease_specs.4.8.gz"))
+    assert File.exist?(@raw_specs_path.join("specs.4.8.gz"))
+    assert File.exist?(@raw_specs_path.join("latest_specs.4.8.gz"))
+    assert File.exist?(@raw_specs_path.join("prerelease_specs.4.8.gz"))
+  end
+
+  test "saves filtered specs files (copy of raw for baseline)" do
+    stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:latest, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:prerelease, [])
+
+    SpecsBaselineImporter.import
+
+    # Filtered specs should exist (same as raw for baseline import)
+    assert File.exist?(@filtered_specs_path.join("specs.4.8.gz"))
+    assert File.exist?(@filtered_specs_path.join("latest_specs.4.8.gz"))
   end
 
   test "sets baseline settings after import" do
@@ -114,27 +80,65 @@ class SpecsBaselineImporterTest < ActiveSupport::TestCase
 
     SpecsBaselineImporter.import
 
-    assert Setting.baseline_imported?
+    assert SpecsBaselineImporter.baseline_imported?
     assert_equal "specs", Setting.get(:baseline_source)
   end
 
-  test "handles different platforms" do
-    stub_specs(:all, [
-      ["nokogiri", Gem::Version.new("1.0.0"), "ruby"],
-      ["nokogiri", Gem::Version.new("1.0.0"), "x86_64-linux"],
-      ["nokogiri", Gem::Version.new("1.0.0"), "arm64-darwin"]
-    ])
+  test "baseline_imported? returns true after import" do
+    stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
     stub_specs(:latest, [])
     stub_specs(:prerelease, [])
 
-    count = SpecsBaselineImporter.import
+    refute SpecsBaselineImporter.baseline_imported?
 
-    assert_equal 3, count
-    gem_package = GemPackage.find_by(name: "nokogiri")
-    assert_equal 3, gem_package.versions.count
-    assert gem_package.versions.exists?(platform: "ruby")
-    assert gem_package.versions.exists?(platform: "x86_64-linux")
-    assert gem_package.versions.exists?(platform: "arm64-darwin")
+    SpecsBaselineImporter.import
+
+    assert SpecsBaselineImporter.baseline_imported?
+  end
+
+  test "includes prerelease when requested" do
+    stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:latest, [])
+    stub_specs(:prerelease, [["rails", Gem::Version.new("8.0.0.beta1"), "ruby"]])
+
+    count = SpecsBaselineImporter.import(include_prerelease: true)
+
+    # Should include prerelease in count
+    assert_equal 2, count
+    # Prerelease specs should be in filtered (not just raw)
+    assert File.exist?(@filtered_specs_path.join("prerelease_specs.4.8.gz"))
+  end
+
+  test "saves prerelease to raw even when not included" do
+    stub_specs(:all, [["rails", Gem::Version.new("7.0.0"), "ruby"]])
+    stub_specs(:latest, [])
+    stub_specs(:prerelease, [["rails", Gem::Version.new("8.0.0.beta1"), "ruby"]])
+
+    SpecsBaselineImporter.import(include_prerelease: false)
+
+    # Prerelease raw specs should exist (for SyncSpecsJob to diff against)
+    assert File.exist?(@raw_specs_path.join("prerelease_specs.4.8.gz"))
+  end
+
+  test "specs content is valid Marshal format" do
+    specs = [
+      ["rails", Gem::Version.new("7.0.0"), "ruby"],
+      ["nokogiri", Gem::Version.new("1.16.0"), "x86_64-linux"]
+    ]
+    stub_specs(:all, specs)
+    stub_specs(:latest, [])
+    stub_specs(:prerelease, [])
+
+    SpecsBaselineImporter.import
+
+    # Read and verify specs
+    path = @filtered_specs_path.join("specs.4.8.gz")
+    data = File.binread(path)
+    parsed = parse_gzipped_specs(data)
+
+    assert_equal 2, parsed.size
+    assert_equal "rails", parsed[0][0]
+    assert_equal "nokogiri", parsed[1][0]
   end
 
   private
@@ -156,5 +160,10 @@ class SpecsBaselineImporterTest < ActiveSupport::TestCase
     gz.write(Marshal.dump(specs))
     gz.close
     io.string
+  end
+
+  def parse_gzipped_specs(data)
+    gz = Zlib::GzipReader.new(StringIO.new(data))
+    Marshal.load(gz.read)
   end
 end

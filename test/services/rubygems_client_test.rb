@@ -52,7 +52,7 @@ class RubygemsClientTest < ActiveSupport::TestCase
 
     result = RubygemsClient.fetch_gem_info("rails")
 
-    assert_equal({ "name" => "rails", "version" => "7.0.0" }, result)
+    assert_equal({"name" => "rails", "version" => "7.0.0"}, result)
   end
 
   test "fetch_gem_info returns nil on failure" do
