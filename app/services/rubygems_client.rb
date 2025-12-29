@@ -53,15 +53,26 @@ class RubygemsClient
       false
     end
 
+    # Parses RubyGems specs from gzipped Marshal data.
+    #
+    # Security note: Marshal.load is required here because RubyGems uses Marshal
+    # format for specs files (specs.4.8.gz). This is the standard protocol and
+    # cannot be avoided. The security risk is mitigated because:
+    #   1. Data is fetched only from rubygems.org (trusted source)
+    #   2. HTTPS ensures data integrity in transit
+    #   3. Specs contain only simple data: [name, Gem::Version, platform] tuples
+    #
+    # rubocop:disable Security/MarshalLoad
     def parse_specs(gzipped_data)
       return [] unless gzipped_data
 
       io = StringIO.new(gzipped_data)
       gz = Zlib::GzipReader.new(io)
       Marshal.load(gz.read)
-    rescue
-      Rails.logger.error("Failed to parse specs:")
+    rescue => e
+      Rails.logger.error("Failed to parse specs: #{e.message}")
       []
     end
+    # rubocop:enable Security/MarshalLoad
   end
 end
