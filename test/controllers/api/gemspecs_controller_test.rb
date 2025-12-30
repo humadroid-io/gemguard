@@ -45,12 +45,13 @@ class Api::GemspecsControllerTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
-  test "show returns 404 for actively quarantined gem" do
+  test "show returns 503 for actively quarantined gem" do
     create(:gem_version, :quarantined, gem_package: @gem_package, version: "1.0.0")
 
     get "/quick/Marshal.4.8/rails-1.0.0.gemspec.rz"
 
-    assert_response :not_found
+    assert_response :service_unavailable
+    assert_equal "300", response.headers["Retry-After"]
   end
 
   test "show serves approved gemspec" do

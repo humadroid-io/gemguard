@@ -31,6 +31,18 @@ class AuditLog < ApplicationRecord
     )
   end
 
+  def self.log_gemspec_request(gem_name:, version:, request:)
+    create!(
+      gem_name: gem_name,
+      version: version,
+      action: "gemspec_request",
+      ip_address: request.remote_ip,
+      user_agent: request.user_agent,
+      bundle_version: extract_bundler_version(request.user_agent),
+      requested_at: Time.current
+    )
+  end
+
   def self.extract_bundler_version(user_agent)
     return unless user_agent
     match = user_agent.match(/bundler\/(\d+\.\d+\.\d+)/)

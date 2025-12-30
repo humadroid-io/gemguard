@@ -80,8 +80,8 @@ class Admin::GemPackagesControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "approve_version removes from QuarantinedVersion" do
+    # GemVersion callback creates QuarantinedVersion automatically when status is :quarantined
     quarantined = create(:gem_version, :quarantined, gem_package: @gem_package, version: "7.1.0")
-    create(:quarantined_version, name: @gem_package.name, version: "7.1.0", platform: "ruby")
 
     assert QuarantinedVersion.exists?(name: @gem_package.name, version: "7.1.0")
 

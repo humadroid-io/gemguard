@@ -1,103 +1,31 @@
 module Api
   class GemsController < BaseController
+    include GemVersionLookup
+
     def show
       gem_file = params[:id]
       return head :bad_request unless gem_file.end_with?(".gem")
 
-      parsed = parse_gem_filename(gem_file)
+      parsed = parse_gem_identifier(gem_file, ".gem")
       return head :bad_request unless parsed
 
       gem_version = find_or_fetch_gem_version(parsed)
 
-      if gem_version.nil?
-        head :not_found
-      elsif gem_version.blocked?
-        head :forbidden
-      elsif !gem_version.available?
-        head :not_found # Return 404 for quarantined gems (consistent with filtered specs)
-      else
-        serve_gem(gem_version, gem_file)
+      handle_gem_version_response(gem_version) do |gv|
+        serve_gem(gv, gem_file)
       end
     end
 
     private
 
-    def parse_gem_filename(filename)
-      name = filename.chomp(".gem")
-      parts = name.split("-")
-
-      return nil if parts.size < 2
-
-      version_index = parts.rindex { |p| p.match?(/^\d/) }
-      return nil unless version_index
-
-      gem_name = parts[0...version_index].join("-")
-      version = parts[version_index]
-      platform = parts[(version_index + 1)..].join("-").presence || "ruby"
-
-      {name: gem_name, version: version, platform: platform}
+    # Hook: mark gem package as tracked when first created
+    def configure_new_gem_package(pkg)
+      pkg.tracked_at = Time.current
     end
 
-    def find_or_fetch_gem_version(parsed)
-      # First, try to find in database
-      gem_version = find_gem_version(parsed)
-      return gem_version if gem_version
-
-      # Not in database - check upstream if gem exists
-      fetch_gem_from_upstream(parsed)
-    end
-
-    def find_gem_version(parsed)
-      gem_package = GemPackage.find_by(name: parsed[:name])
-      return nil unless gem_package
-
-      gem_package.versions.find_by(version: parsed[:version], platform: parsed[:platform])
-    end
-
-    def fetch_gem_from_upstream(parsed)
-      # Check if gem exists on RubyGems
-      gem_info = RubygemsClient.fetch_gem_info(parsed[:name])
-      return nil unless gem_info
-
-      # Check if the specific version exists
-      version_info = RubygemsClient.fetch_version_info(parsed[:name], parsed[:version])
-      return nil unless version_info
-
-      # Create the gem package and version
-      create_gem_version(parsed, gem_info, version_info)
-    end
-
-    def create_gem_version(parsed, gem_info, version_info)
-      gem_package = GemPackage.find_or_create_by!(name: parsed[:name]) do |pkg|
-        pkg.info = gem_info["info"]
-        pkg.homepage_url = gem_info["homepage_uri"]
-        pkg.downloads_count = gem_info["downloads"]
-        pkg.tracked_at = Time.current # Mark as tracked when first downloaded
-      end
-
-      # Mark as tracked if existing package wasn't already
+    # Hook: ensure existing packages get tracked too
+    def after_gem_package_found(gem_package)
       gem_package.track!
-
-      published_at = begin
-        Time.parse(version_info["created_at"])
-      rescue
-        Time.current
-      end
-
-      # Check if actively quarantined (either in QuarantinedVersion table or recently published)
-      is_quarantined = QuarantinedVersion.quarantined?(parsed[:name], parsed[:version], parsed[:platform]) ||
-        published_at > Setting.quarantine_period.ago
-
-      gem_package.versions.create!(
-        version: parsed[:version],
-        platform: parsed[:platform],
-        published_at: published_at,
-        first_seen_at: Time.current,
-        status: is_quarantined ? :quarantined : :approved
-      )
-    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-      # Race condition - another request created it
-      find_gem_version(parsed)
     end
 
     def serve_gem(gem_version, gem_file)
@@ -109,7 +37,6 @@ module Api
       unless File.exist?(local_path)
         success = download_gem(gem_version, local_path)
         unless success
-          # Stream directly from upstream without caching
           stream_from_upstream(gem_version)
           return
         end
@@ -142,7 +69,6 @@ module Api
       response = HTTParty.get(url, timeout: 120)
 
       if response.success?
-        # Write to temp file to avoid binary output to console
         temp_path = Rails.root.join("tmp", "gems", gem_version.gem_file_name)
         FileUtils.mkdir_p(File.dirname(temp_path))
         File.binwrite(temp_path, response.body)

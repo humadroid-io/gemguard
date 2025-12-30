@@ -1,16 +1,14 @@
 # GemGuard - Self-Hosted RubyGems Security Proxy
 #
 # Usage:
-#   docker compose up -d              # Start on default port 9292
-#   GEMGUARD_PORT=3001 docker compose up -d  # Start on custom port
-#   docker compose logs -f            # View logs
-#   docker compose down               # Stop
+#   docker compose up -d                      # Start on port 9292
+#   GEMGUARD_PORT=3001 docker compose up -d   # Start on custom port
+#   docker compose exec web bin/rails baseline:import  # First run
+#   docker compose logs -f                    # View logs
+#   docker compose down                       # Stop
 #
-# First run:
-#   docker compose exec web bin/rails baseline:import
-#
-# Then configure your Gemfile:
-#   source "http://localhost:9292"
+# SECRET_KEY_BASE is auto-generated on first run and persisted in the db volume.
+# For multi-replica deployments, set SECRET_KEY_BASE explicitly in environment.
 
 services:
   web:
@@ -19,8 +17,10 @@ services:
       - "${GEMGUARD_PORT:-9292}:80"
     environment:
       - RAILS_ENV=production
-      - RAILS_MASTER_KEY=${RAILS_MASTER_KEY}
       - RAILS_LOG_TO_STDOUT=1
+      - SOLID_QUEUE_IN_PUMA=1
+      # Optional: Set explicitly for multi-replica deployments
+      # - SECRET_KEY_BASE=${SECRET_KEY_BASE}
     volumes:
       - gemguard_storage:/rails/storage
       - gemguard_db:/rails/db

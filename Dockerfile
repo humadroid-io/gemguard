@@ -3,7 +3,11 @@
 
 # This Dockerfile is designed for production, not development. Use with Kamal or build'n'run by hand:
 # docker build -t gemguard .
-# docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name gemguard gemguard
+# docker run -d -p 80:80 -e SOLID_QUEUE_IN_PUMA=1 -v gemguard_db:/rails/db -v gemguard_storage:/rails/storage --name gemguard gemguard
+#
+# SOLID_QUEUE_IN_PUMA=1 enables background job processing (required for specs sync)
+# SECRET_KEY_BASE is auto-generated on first run and persisted in /rails/db/.secret_key_base
+# For multi-replica deployments, set SECRET_KEY_BASE explicitly via -e SECRET_KEY_BASE=...
 
 # For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
 
@@ -14,9 +18,9 @@ FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
 # Rails app lives here
 WORKDIR /rails
 
-# Install base packages
+# Install base packages (minimal - no image processing needed)
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y curl libjemalloc2 libvips sqlite3 && \
+    apt-get install --no-install-recommends -y curl libjemalloc2 sqlite3 && \
     ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 

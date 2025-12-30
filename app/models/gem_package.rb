@@ -7,6 +7,10 @@ class GemPackage < ApplicationRecord
   scope :with_cached_versions, -> { joins(:versions).where.not(gem_versions: {cached_at: nil}).distinct }
   scope :tracked, -> { where.not(tracked_at: nil) }
 
+  def to_s
+    name
+  end
+
   def track!
     update!(tracked_at: Time.current) if tracked_at.nil?
   end

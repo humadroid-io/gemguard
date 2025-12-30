@@ -19,6 +19,9 @@ git clone https://github.com/your-org/gemguard.git
 cd gemguard
 docker compose up -d
 
+# Import the baseline (first run only, takes 2-5 minutes)
+docker compose exec web bin/rails baseline:import
+
 # Update your Gemfile
 source "http://localhost:9292"  # Instead of "https://rubygems.org"
 
@@ -27,6 +30,8 @@ bundle install
 ```
 
 That's it! No agents to install, no complex configuration, no changes to your workflow.
+
+> **Don't have Docker Compose?** Install it with `apt install docker-compose-plugin` (Linux) or get [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac/Windows). See [plain docker commands](#using-docker-without-compose) if you prefer not to install it.
 
 ## Key Features
 
@@ -64,8 +69,6 @@ That's it! No agents to install, no complex configuration, no changes to your wo
 
 ### Using Docker Compose (Recommended)
 
-The easiest way to run GemGuard locally or on a server:
-
 ```bash
 # Start GemGuard on port 9292
 docker compose up -d
@@ -81,8 +84,6 @@ GemGuard will be available at `http://localhost:9292`.
 
 #### Custom Port
 
-To use a different port, set the `GEMGUARD_PORT` environment variable:
-
 ```bash
 # Run on port 3001
 GEMGUARD_PORT=3001 docker compose up -d
@@ -97,54 +98,51 @@ docker compose up -d
 
 #### Persistent Data
 
-Docker Compose automatically creates volumes for:
+Docker Compose automatically creates named volumes:
 
 - `gemguard_storage` - Specs files and cached gems
-- `gemguard_db` - SQLite database
+- `gemguard_db` - SQLite database and auto-generated secrets
 
-Data persists across container restarts.
+Data persists across container restarts. A unique `SECRET_KEY_BASE` is auto-generated on first run and saved to the db volume, so you don't need to configure any secrets for single-instance deployments.
 
-### Using Docker Directly
+> **Multi-replica deployments**: If running multiple GemGuard instances behind a load balancer, set `SECRET_KEY_BASE` explicitly in your environment to ensure all instances share the same secret.
+
+### Using Docker Without Compose
+
+If you don't have Docker Compose installed:
 
 ```bash
 # Build the image
 docker build -t gemguard .
 
 # Run on port 9292
-docker run -d \
-  --name gemguard \
+docker run -d --name gemguard \
   -p 9292:80 \
+  -e SOLID_QUEUE_IN_PUMA=1 \
   -v gemguard_storage:/rails/storage \
   -v gemguard_db:/rails/db \
-  -e RAILS_MASTER_KEY="$(cat config/master.key)" \
   gemguard
 
 # View logs
 docker logs -f gemguard
 
-# Stop
+# Stop and remove
 docker stop gemguard && docker rm gemguard
 ```
 
 ### First Run: Import Baseline
 
-After starting GemGuard for the first time, you need to import the baseline from RubyGems.org. This tells GemGuard which gems existed before your installation, so only NEW versions get quarantined.
-
-#### Via Admin UI
-
-1. Navigate to `http://localhost:9292/admin/settings`
-2. Click "Import Baseline"
-3. Wait 2-5 minutes for the import to complete
-
-#### Via Rake Task
+After starting GemGuard for the first time, import the baseline from RubyGems.org. This tells GemGuard which gems existed before your installation, so only NEW versions get quarantined.
 
 ```bash
-# If using Docker Compose
+# With Docker Compose
 docker compose exec web bin/rails baseline:import
 
-# If using Docker directly
-docker exec -it gemguard bin/rails baseline:import
+# Without Docker Compose
+docker exec gemguard bin/rails baseline:import
 ```
+
+This takes 2-5 minutes. You can also import via the Admin UI at `http://localhost:9292/admin/settings`.
 
 ### Configuring Your Projects
 

@@ -5,6 +5,9 @@ class QuarantinedVersion < ApplicationRecord
   validates :first_seen_at, presence: true
   validates :version, uniqueness: {scope: [:name, :platform]}
 
+  # Regenerate filtered specs when quarantine changes
+  after_commit :schedule_specs_regeneration, on: [:create, :destroy]
+
   scope :active, -> { where("first_seen_at > ?", Setting.quarantine_period.ago) }
   scope :expired, -> { where("first_seen_at <= ?", Setting.quarantine_period.ago) }
 
@@ -14,5 +17,15 @@ class QuarantinedVersion < ApplicationRecord
 
   def expired?
     first_seen_at <= Setting.quarantine_period.ago
+  end
+
+  private
+
+  # Schedule specs regeneration via job
+  # Jobs are deduplicated to avoid multiple concurrent regenerations
+  def schedule_specs_regeneration
+    RegenerateFilteredSpecsJob.perform_later(type: :all)
+    RegenerateFilteredSpecsJob.perform_later(type: :latest)
+    RegenerateFilteredSpecsJob.perform_later(type: :prerelease)
   end
 end

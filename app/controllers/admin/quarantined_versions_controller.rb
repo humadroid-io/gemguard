@@ -36,10 +36,9 @@ module Admin
       gem_version.first_seen_at ||= @quarantined_version.first_seen_at
       gem_version.save!
 
-      # Remove from quarantine
+      # Remove from quarantine (callback triggers specs regeneration)
       @quarantined_version.destroy
 
-      regenerate_specs
       redirect_to admin_quarantined_versions_path, notice: "#{@quarantined_version.name} #{@quarantined_version.version} approved"
     end
 
@@ -56,16 +55,16 @@ module Admin
       gem_version.first_seen_at ||= @quarantined_version.first_seen_at
       gem_version.save!
 
-      # Keep in quarantine to ensure it stays excluded
+      # Keep in quarantine - specs regeneration needed for blocked status
       regenerate_specs
       redirect_to admin_quarantined_versions_path, notice: "#{@quarantined_version.name} #{@quarantined_version.version} blocked"
     end
 
     def destroy
       @quarantined_version = QuarantinedVersion.find(params[:id])
+      # Callback triggers specs regeneration
       @quarantined_version.destroy
 
-      regenerate_specs
       redirect_to admin_quarantined_versions_path, notice: "#{@quarantined_version.name} #{@quarantined_version.version} removed from quarantine"
     end
 
@@ -84,9 +83,9 @@ module Admin
       end
 
       count = expired.count
+      # Each destroy triggers callback; concurrency limits prevent duplicate runs
       expired.destroy_all
 
-      regenerate_specs
       redirect_to admin_quarantined_versions_path, notice: "#{count} expired versions approved"
     end
 

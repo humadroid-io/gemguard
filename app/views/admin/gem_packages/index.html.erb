@@ -7,12 +7,21 @@
   <div class="card-body">
     <%= form_with url: admin_gem_packages_path, method: :get, class: "flex flex-wrap gap-4" do |f| %>
       <div class="form-control flex-1 min-w-[200px]">
-        <input type="text" name="search" value="<%= params[:search] %>" placeholder="Search gems..." class="input input-bordered w-full" />
+        <input
+          type="text"
+          name="search"
+          value="<%= params[:search] %>"
+          placeholder="Search gems..."
+          class="input input-bordered w-full"
+        />
       </div>
       <div class="form-control">
         <select name="status" class="select select-bordered">
           <option value="">All statuses</option>
-          <option value="quarantined" <%= "selected" if params[:status] == "quarantined" %>>Quarantined</option>
+          <option
+            value="quarantined"
+            <%= "selected" if params[:status] == "quarantined" %>
+          >Quarantined</option>
           <option value="approved" <%= "selected" if params[:status] == "approved" %>>Approved</option>
           <option value="blocked" <%= "selected" if params[:status] == "blocked" %>>Blocked</option>
         </select>
@@ -40,10 +49,12 @@
       <tbody>
         <% @gem_packages.each do |gem_package| %>
           <tr class="hover">
-            <td>
-              <div class="font-bold"><%= gem_package.name %></div>
-              <% if gem_package.info.present? %>
-                <div class="text-sm text-base-content/70 truncate max-w-md"><%= truncate(gem_package.info, length: 80) %></div>
+            <td class="relative">
+              <%= link_to admin_gem_package_path(gem_package) do %>
+                <div class="font-bold"><%= gem_package.name %></div>
+                <% if gem_package.info.present? %>
+                  <div class="text-sm text-base-content/70 truncate max-w-md"><%= truncate(gem_package.info, length: 80) %></div>
+                <% end %>
               <% end %>
             </td>
             <td>
@@ -55,21 +66,27 @@
               <% blocked = gem_package.versions.blocked.count %>
               <div class="flex gap-1">
                 <% if quarantined > 0 %>
-                  <span class="badge badge-warning badge-sm"><%= quarantined %> quarantined</span>
+                  <span class="badge badge-warning badge-sm"><%= quarantined %>
+                    quarantined</span>
                 <% end %>
                 <% if approved > 0 %>
-                  <span class="badge badge-success badge-sm"><%= approved %> approved</span>
+                  <span class="badge badge-success badge-sm"><%= approved %>
+                    approved</span>
                 <% end %>
                 <% if blocked > 0 %>
-                  <span class="badge badge-error badge-sm"><%= blocked %> blocked</span>
+                  <span class="badge badge-error badge-sm"><%= blocked %>
+                    blocked</span>
                 <% end %>
               </div>
             </td>
             <td class="text-sm text-base-content/70">
-              <%= time_ago_in_words(gem_package.updated_at) %> ago
+              <%= time_ago_in_words(gem_package.updated_at) %>
+              ago
             </td>
             <td>
-              <%= link_to "View", admin_gem_package_path(gem_package), class: "btn btn-ghost btn-sm" %>
+              <%= link_to "View",
+              admin_gem_package_path(gem_package),
+              class: "btn btn-ghost btn-sm" %>
             </td>
           </tr>
         <% end %>

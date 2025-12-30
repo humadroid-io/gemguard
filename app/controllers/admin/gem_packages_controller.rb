@@ -45,13 +45,13 @@ module Admin
       @version.update!(status: :approved)
 
       # Remove from quarantine so it appears in specs
+      # QuarantinedVersion callback handles specs regeneration
       QuarantinedVersion.where(
         name: @gem_package.name,
         version: @version.version,
         platform: @version.platform
       ).destroy_all
 
-      regenerate_specs
       redirect_to admin_gem_package_path(@gem_package), notice: "Version #{@version.version} approved"
     end
 
@@ -61,6 +61,7 @@ module Admin
       @version.update!(status: :blocked)
 
       # Ensure it's in quarantine so it's excluded from specs
+      # QuarantinedVersion callback handles specs regeneration
       QuarantinedVersion.find_or_create_by!(
         name: @gem_package.name,
         version: @version.version,
@@ -69,7 +70,6 @@ module Admin
         qv.first_seen_at = Time.current
       end
 
-      regenerate_specs
       redirect_to admin_gem_package_path(@gem_package), notice: "Version #{@version.version} blocked"
     end
 

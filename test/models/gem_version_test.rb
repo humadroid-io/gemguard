@@ -141,4 +141,44 @@ class GemVersionTest < ActiveSupport::TestCase
     assert_not_includes result, quarantined
     assert_not_includes result, blocked
   end
+
+  test "creating quarantined version also creates QuarantinedVersion record" do
+    gem_package = create(:gem_package, name: "evil-gem")
+
+    assert_difference "QuarantinedVersion.count", 1 do
+      create(:gem_version, :quarantined, gem_package: gem_package, version: "1.0.0", platform: "ruby")
+    end
+
+    qv = QuarantinedVersion.find_by(name: "evil-gem", version: "1.0.0", platform: "ruby")
+    assert_not_nil qv
+  end
+
+  test "updating version to quarantined creates QuarantinedVersion record" do
+    gem_version = create(:gem_version, :approved)
+
+    assert_difference "QuarantinedVersion.count", 1 do
+      gem_version.update!(status: :quarantined)
+    end
+
+    qv = QuarantinedVersion.find_by(
+      name: gem_version.gem_name,
+      version: gem_version.version,
+      platform: gem_version.platform
+    )
+    assert_not_nil qv
+  end
+
+  test "creating approved version does not create QuarantinedVersion record" do
+    assert_no_difference "QuarantinedVersion.count" do
+      create(:gem_version, :approved)
+    end
+  end
+
+  test "quarantined callback is idempotent" do
+    gem_version = create(:gem_version, :quarantined)
+
+    assert_no_difference "QuarantinedVersion.count" do
+      gem_version.update!(file_size: 12345)
+    end
+  end
 end

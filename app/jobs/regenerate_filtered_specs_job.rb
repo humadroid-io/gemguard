@@ -1,6 +1,10 @@
 class RegenerateFilteredSpecsJob < ApplicationJob
   queue_as :default
 
+  # Limit to one concurrent job per spec type to avoid race conditions
+  # If a job with the same type is already running/queued, this one is discarded
+  limits_concurrency to: 1, key: ->(options = {}) { options[:type] || options["type"] || :all }
+
   SPEC_TYPES = {
     all: "specs.4.8.gz",
     latest: "latest_specs.4.8.gz",

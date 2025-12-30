@@ -1,5 +1,26 @@
 #!/bin/bash -e
 
+# GemGuard Docker Entrypoint
+# Handles automatic SECRET_KEY_BASE generation and database setup
+
+SECRET_FILE="/rails/db/.secret_key_base"
+
+# Auto-generate SECRET_KEY_BASE if not provided
+# This enables zero-config startup for self-hosted deployments
+if [ -z "$SECRET_KEY_BASE" ]; then
+  if [ -f "$SECRET_FILE" ]; then
+    # Use previously generated secret (persisted in volume)
+    export SECRET_KEY_BASE=$(cat "$SECRET_FILE")
+    echo "Using existing SECRET_KEY_BASE from volume"
+  else
+    # Generate new secret and persist for future restarts
+    export SECRET_KEY_BASE=$(openssl rand -hex 64)
+    echo "$SECRET_KEY_BASE" > "$SECRET_FILE"
+    chmod 600 "$SECRET_FILE"
+    echo "Generated new SECRET_KEY_BASE (saved to volume for persistence)"
+  fi
+fi
+
 # If running the rails server then create or migrate existing database
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
   ./bin/rails db:prepare
