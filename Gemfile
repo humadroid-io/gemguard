@@ -69,7 +69,7 @@ group :test do
   gem "minitest", "~> 5.25"
 end
 
-gem "httparty", "~> 0.23.2"
+gem "httparty", "~> 0.24.0"
 gem "pagy", "~> 43.2"
 
 gem "factory_bot_rails", "~> 6.5", groups: [:development, :test]
