@@ -25,11 +25,17 @@ class RubygemsClient
     end
 
     def fetch_version_info(gem_name, version)
+      versions = fetch_all_versions(gem_name)
+      return nil unless versions
+
+      versions.find { |v| v["number"] == version }
+    end
+
+    def fetch_all_versions(gem_name)
       response = get("/api/v1/versions/#{gem_name}.json", timeout: 10)
       return nil unless response.success?
 
-      versions = JSON.parse(response.body)
-      versions.find { |v| v["number"] == version }
+      JSON.parse(response.body)
     rescue JSON::ParserError
       nil
     end

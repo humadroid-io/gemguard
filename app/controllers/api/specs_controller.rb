@@ -26,29 +26,44 @@ module Api
       if File.exist?(filtered_path) && fresh_cache?(filtered_path)
         serve_file(filtered_path, filename)
       else
-        sync_and_serve(filename)
+        sync_and_serve(filename, filtered_path)
       end
     end
 
-    def sync_and_serve(filename)
+    def sync_and_serve(filename, filtered_path)
       type = SPEC_TYPES[filename]
-      SyncSpecsJob.perform_now(type: type)
+      sync_success = false
 
-      filtered_path = filtered_specs_path.join(filename)
+      begin
+        SyncSpecsJob.perform_now(type: type)
+        sync_success = true
+      rescue => e
+        Rails.logger.error("SpecsController: Sync failed: #{e.message}")
+      end
+
+      # Prefer serving local file (even if stale) over proxying
+      # This ensures offline operation works with cached data
       if File.exist?(filtered_path)
-        serve_file(filtered_path, filename)
+        serve_file(filtered_path, filename, stale: !sync_success)
+      elsif sync_success
+        # Sync succeeded but no file - unexpected, try proxy
+        proxy_from_upstream(filename)
       else
-        # Fallback: proxy from upstream if sync failed
+        # No local file and sync failed - try proxy as last resort
         proxy_from_upstream(filename)
       end
-    rescue => e
-      Rails.logger.error("SpecsController: Sync failed: #{e.message}")
-      proxy_from_upstream(filename)
     end
 
-    def serve_file(path, filename)
+    def serve_file(path, filename, stale: false)
       AuditLog.log_spec_request(request: request, spec_type: filename)
       set_cache_headers(File.mtime(path))
+
+      # Indicate when serving stale data (upstream unavailable)
+      if stale
+        response.headers["X-GemGuard-Stale"] = "true"
+        Rails.logger.info("SpecsController: Serving stale #{filename} (upstream unavailable)")
+      end
+
       send_file path, type: "application/x-gzip", disposition: "inline"
     end
 

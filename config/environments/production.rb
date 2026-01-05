@@ -79,6 +79,10 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [:id]
 
+  # Disable HTTP Basic Auth for Mission Control Jobs dashboard
+  # GemGuard is designed for self-hosted/internal use behind a firewall
+  config.mission_control.jobs.http_basic_auth_enabled = false
+
   # Enable DNS rebinding protection and other `Host` header attacks.
   # config.hosts = [
   #   "example.com",     # Allow requests from example.com

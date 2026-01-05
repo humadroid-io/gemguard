@@ -24,8 +24,12 @@ class QuarantinedVersion < ApplicationRecord
   # Schedule specs regeneration via job
   # Jobs are deduplicated to avoid multiple concurrent regenerations
   def schedule_specs_regeneration
+    # Legacy Marshal specs
     RegenerateFilteredSpecsJob.perform_later(type: :all)
     RegenerateFilteredSpecsJob.perform_later(type: :latest)
     RegenerateFilteredSpecsJob.perform_later(type: :prerelease)
+
+    # Compact Index
+    SyncCompactIndexJob.perform_later(type: :versions)
   end
 end

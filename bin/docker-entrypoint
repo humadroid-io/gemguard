@@ -24,6 +24,9 @@ fi
 # If running the rails server then create or migrate existing database
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
   ./bin/rails db:prepare
+
+  # Bootstrap on first deploy - syncs Compact Index and legacy specs
+  ./bin/rails deploy:bootstrap
 fi
 
 exec "${@}"

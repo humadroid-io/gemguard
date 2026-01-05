@@ -79,7 +79,7 @@ module GemVersionLookup
       head :forbidden
     elsif gem_version.actively_quarantined?
       response.headers["Retry-After"] = "300"
-      render plain: "Gem #{gem_versiom.gem_package} in version #{gem_version} is quarantined. Re-run bundle install to refresh specs.",
+      render plain: "Gem #{gem_version.gem_package} in version #{gem_version} is quarantined. Re-run bundle install to refresh specs.",
         status: :service_unavailable
     else
       yield gem_version

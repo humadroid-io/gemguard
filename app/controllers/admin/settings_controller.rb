@@ -34,5 +34,20 @@ module Admin
       ImportSpecsBaselineJob.perform_later(include_prerelease: include_prerelease)
       redirect_to admin_settings_path, notice: "Baseline import started. This may take 2-5 minutes."
     end
+
+    def import_lockfile
+      unless params[:lockfile].present?
+        redirect_to admin_settings_path, alert: "Please select a Gemfile.lock file."
+        return
+      end
+
+      content = params[:lockfile].read
+      result = LockfileImporter.import(content)
+
+      message = "Imported #{result.imported} gems (#{result.existing} already existed). "
+      message += "Refreshing #{result.queued} gems in background to detect newer versions."
+
+      redirect_to admin_settings_path, notice: message
+    end
   end
 end

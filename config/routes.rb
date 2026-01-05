@@ -1,10 +1,16 @@
 Rails.application.routes.draw do
   # RubyGems-compatible API endpoints (Bundler requires these)
+  # Legacy Marshal-based specs (fallback for older Bundler)
   get "specs.4.8.gz", to: "api/specs#index", defaults: {format: :marshal}
   get "latest_specs.4.8.gz", to: "api/specs#latest", defaults: {format: :marshal}
   get "prerelease_specs.4.8.gz", to: "api/specs#prerelease", defaults: {format: :marshal}
   get "gems/:id", to: "api/gems#show", constraints: {id: /[^\/]+\.gem/}
   get "quick/Marshal.4.8/:id", to: "api/gemspecs#show", constraints: {id: /[^\/]+\.gemspec\.rz/}
+
+  # Compact Index (modern Bundler, much faster)
+  get "versions", to: "api/compact_index#versions"
+  get "info/:name", to: "api/compact_index#info", constraints: {name: /[^\/]+/}
+  get "names", to: "api/compact_index#names"
 
   # Admin interface
   namespace :admin do
@@ -33,6 +39,7 @@ Rails.application.routes.draw do
     end
     resource :settings, only: [:show, :update] do
       post :import_baseline
+      post :import_lockfile
     end
   end
   mount MissionControl::Jobs::Engine, at: "/admin/jobs"

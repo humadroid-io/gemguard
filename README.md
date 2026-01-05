@@ -19,17 +19,17 @@ git clone https://github.com/your-org/gemguard.git
 cd gemguard
 docker compose up -d
 
-# Import the baseline (first run only, takes 2-5 minutes)
-docker compose exec web bin/rails baseline:import
-
 # Update your Gemfile
 source "http://localhost:9292"  # Instead of "https://rubygems.org"
+
+# Import your current gems (via web UI)
+# Go to http://localhost:9292/admin/settings and upload your Gemfile.lock
 
 # Install gems as usual
 bundle install
 ```
 
-That's it! No agents to install, no complex configuration, no changes to your workflow.
+That's it! GemGuard automatically bootstraps on first start. Upload your `Gemfile.lock` to approve your current dependencies and start tracking new versions.
 
 > **Don't have Docker Compose?** Install it with `apt install docker-compose-plugin` (Linux) or get [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac/Windows). See [plain docker commands](#using-docker-without-compose) if you prefer not to install it.
 
@@ -55,8 +55,9 @@ That's it! No agents to install, no complex configuration, no changes to your wo
 
 ### Reliable
 
-- **Offline Mode**: Continue working even when RubyGems.org is down
-- **Local Cache**: All gems cached after first download
+- **Offline Mode**: Continue working even when RubyGems.org is down (serves cached data)
+- **Local Cache**: All gems and index files cached after first download
+- **Stale-While-Error**: Automatically serves cached specs when upstream is unavailable
 - **Lightweight**: Runs on a $5/month VPS with SQLite
 
 ## Who is GemGuard For?
@@ -130,19 +131,34 @@ docker logs -f gemguard
 docker stop gemguard && docker rm gemguard
 ```
 
-### First Run: Import Baseline
+### First Run: Bootstrap
 
-After starting GemGuard for the first time, import the baseline from RubyGems.org. This tells GemGuard which gems existed before your installation, so only NEW versions get quarantined.
+GemGuard automatically bootstraps on first start - it syncs the Compact Index and specs files from RubyGems.org. This establishes the baseline so only NEW versions (published after bootstrap) get quarantined.
+
+### Import Your Application's Gems
+
+After GemGuard is running, import your application's dependencies to:
+- Mark your current gem versions as **approved**
+- Fetch gem metadata (descriptions, release dates)
+- **Quarantine any newer versions** not in your lockfile
+
+**Option 1: Web Upload (Recommended)**
+
+Go to `http://localhost:9292/admin/settings` and upload your `Gemfile.lock` in the "Import from Gemfile.lock" section.
+
+**Option 2: Fresh Bundle Install**
+
+Point your app at GemGuard and re-fetch all gems:
 
 ```bash
-# With Docker Compose
-docker compose exec web bin/rails baseline:import
+# Update Gemfile source to GemGuard
+# source "http://localhost:9292"
 
-# Without Docker Compose
-docker exec gemguard bin/rails baseline:import
+# Clear cache and re-install
+rm -rf vendor/bundle .bundle/cache && bundle install
 ```
 
-This takes 2-5 minutes. You can also import via the Admin UI at `http://localhost:9292/admin/settings`.
+This creates GemPackage/GemVersion records as gems are fetched.
 
 ### Configuring Your Projects
 
@@ -218,8 +234,36 @@ storage/
 │   ├── specs.4.8.gz      # Filtered (served to Bundler)
 │   ├── latest_specs.4.8.gz
 │   └── prerelease_specs.4.8.gz
+├── compact_index/        # Compact Index files
+│   ├── versions          # All gem versions
+│   ├── names             # All gem names
+│   └── info/             # Per-gem dependency info
+│       ├── rails
+│       ├── nokogiri
+│       └── ...
 └── gems/                 # Cached .gem files
 ```
+
+### Offline Operation
+
+GemGuard is designed to work reliably even when RubyGems.org is unavailable:
+
+| Component | Cache Location | Offline Behavior |
+|-----------|----------------|------------------|
+| **Gem files** | `storage/gems/` | Served from cache if previously downloaded |
+| **Legacy specs** | `storage/specs/` | Stale cached version served with `X-GemGuard-Stale: true` header |
+| **Compact Index** | `storage/compact_index/` | Stale cached version served with `X-GemGuard-Stale: true` header |
+
+**To ensure full offline capability:**
+
+1. Import your `Gemfile.lock` via Settings to approve current dependencies
+2. Run `bundle install` once through GemGuard to cache all gem files
+3. The bootstrap task automatically syncs index files on first deploy
+
+When upstream is unavailable, GemGuard:
+- Serves cached gems normally
+- Serves stale index files (adding `X-GemGuard-Stale: true` response header)
+- Returns `502 Bad Gateway` only for gems that were never cached
 
 ## Background Jobs
 
