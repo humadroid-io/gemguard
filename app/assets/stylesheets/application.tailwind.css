@@ -1,2 +1,19 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+/* Pagy pagination styling with DaisyUI */
+.pagy.series-nav {
+  @apply join;
+}
+
+.pagy.series-nav a {
+  @apply join-item btn btn-sm;
+}
+
+.pagy.series-nav a[aria-current="page"] {
+  @apply btn-active pointer-events-none;
+}
+
+.pagy.series-nav span.gap {
+  @apply join-item btn btn-sm btn-disabled;
+}
