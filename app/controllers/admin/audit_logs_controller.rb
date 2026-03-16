@@ -25,6 +25,8 @@ module Admin
     end
 
     def export
+      require "csv"
+
       @audit_logs = AuditLog.order(requested_at: :desc)
 
       if params[:date_from].present?
@@ -39,6 +41,27 @@ module Admin
         format.csv do
           headers["Content-Disposition"] = "attachment; filename=audit_logs_#{Date.current}.csv"
           headers["Content-Type"] = "text/csv"
+          render plain: generate_csv(@audit_logs)
+        end
+      end
+    end
+
+    private
+
+    def generate_csv(audit_logs)
+      CSV.generate do |csv|
+        csv << ["Requested At", "Action", "Gem Name", "Version", "IP Address", "User Agent", "Bundler Version"]
+
+        audit_logs.find_each do |log|
+          csv << [
+            log.requested_at.iso8601,
+            log.action,
+            log.gem_name,
+            log.version,
+            log.ip_address,
+            log.user_agent,
+            log.bundle_version
+          ]
         end
       end
     end

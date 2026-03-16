@@ -90,4 +90,26 @@ class Admin::AuditLogsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Version"
     assert_includes response.body, "IP Address"
   end
+
+  test "export does not HTML-escape quoted values" do
+    create(:audit_log, gem_name: "quoted-gem", user_agent: 'bundler "quoted" agent')
+
+    get export_admin_audit_logs_path(format: :csv)
+
+    assert_response :success
+    assert_includes response.body, 'bundler ""quoted"" agent'
+    assert_not_includes response.body, "&quot;"
+  end
+
+  test "export does not include blank lines between rows" do
+    create(:audit_log, gem_name: "nokogiri", version: "1.18.0")
+
+    get export_admin_audit_logs_path(format: :csv)
+
+    assert_response :success
+
+    lines = response.body.lines
+    assert_equal 3, lines.size
+    refute lines.any? { |line| line.strip.empty? }
+  end
 end
