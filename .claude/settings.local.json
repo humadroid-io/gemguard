@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(bin/rails test:*)",
+      "Bash(sqlite3:*)",
+      "WebSearch",
+      "Bash(bundle exec standardrb:*)",
+      "WebFetch(domain:rubygems.org)",
+      "Bash(bin/rails runner:*)",
+      "WebFetch(domain:ddnexus.github.io)"
+    ]
+  }
+}

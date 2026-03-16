@@ -76,8 +76,14 @@
           <option value="expired" <%= "selected" if params[:status] == "expired" %>>Expired (ready to approve)</option>
         </select>
       </div>
+      <div class="form-control">
+        <select name="usage" class="select select-bordered">
+          <option value="">All gems</option>
+          <option value="used" <%= "selected" if params[:usage] == "used" %>>Used / installed only</option>
+        </select>
+      </div>
       <button type="submit" class="btn btn-primary">Filter</button>
-      <% if params[:search].present? || params[:status].present? %>
+      <% if params[:search].present? || params[:status].present? || params[:usage].present? %>
         <%= link_to "Clear", admin_quarantined_versions_path, class: "btn btn-ghost" %>
       <% end %>
     <% end %>
@@ -165,7 +171,7 @@
   <% if @quarantined_versions.empty? %>
     <div class="p-8 text-center text-base-content/70">
       <p>No quarantined versions found.</p>
-      <% if params[:search].present? || params[:status].present? %>
+      <% if params[:search].present? || params[:status].present? || params[:usage].present? %>
         <p class="mt-2"><%= link_to "Clear filters", admin_quarantined_versions_path, class: "link" %></p>
       <% end %>
     </div>

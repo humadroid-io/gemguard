@@ -64,6 +64,17 @@ class RubygemsClientTest < ActiveSupport::TestCase
     assert_nil result
   end
 
+  test "fetch_dependencies downloads dependency payload" do
+    payload = Marshal.dump([{"name" => "rails", "number" => "7.1.0"}])
+    stub_request(:get, "https://rubygems.org/api/v1/dependencies")
+      .with(query: {"gems" => "rails,nokogiri"})
+      .to_return(status: 200, body: payload)
+
+    result = RubygemsClient.fetch_dependencies(%w[rails nokogiri])
+
+    assert_equal payload, result
+  end
+
   test "parse_specs decompresses and unmarshals data" do
     # Create a valid gzipped marshal data
     specs = [["rails", Gem::Version.new("7.0.0"), "ruby"]]
@@ -87,6 +98,14 @@ class RubygemsClientTest < ActiveSupport::TestCase
   test "parse_specs returns empty array for invalid data" do
     result = RubygemsClient.parse_specs("invalid gzip data")
     assert_equal [], result
+  end
+
+  test "parse_dependencies unmarshals marshal payload" do
+    payload = Marshal.dump([{"name" => "rails", "number" => "7.1.0"}])
+
+    result = RubygemsClient.parse_dependencies(payload)
+
+    assert_equal "rails", result.first["name"]
   end
 
   test "download_file saves file to path" do

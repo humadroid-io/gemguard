@@ -49,6 +49,31 @@ class Api::GemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "300", response.headers["Retry-After"]
   end
 
+  test "show returns 503 when QuarantinedVersion exists even if GemVersion is approved" do
+    # This is the CRITICAL test: ensures manual quarantine via admin UI works
+    # GemVersion status is :approved, but QuarantinedVersion record exists
+    create(:gem_version, :approved, gem_package: @gem_package, version: "1.0.0")
+    create(:quarantined_version, name: "rails", version: "1.0.0", platform: "ruby")
+
+    get "/gems/rails-1.0.0.gem"
+
+    assert_response :service_unavailable,
+      "Should block gem download when QuarantinedVersion exists, regardless of GemVersion.status"
+    assert_equal "300", response.headers["Retry-After"]
+  end
+
+  test "show serves gem when QuarantinedVersion is expired" do
+    create(:gem_version, :approved, gem_package: @gem_package, version: "1.0.0")
+    create(:quarantined_version, :expired, name: "rails", version: "1.0.0", platform: "ruby")
+    stub_request(:get, "https://rubygems.org/gems/rails-1.0.0.gem")
+      .to_return(status: 200, body: "gem content")
+
+    get "/gems/rails-1.0.0.gem"
+
+    assert_response :success,
+      "Should serve gem when QuarantinedVersion is expired"
+  end
+
   test "show serves approved gem" do
     create(:gem_version, :approved, gem_package: @gem_package, version: "1.0.0")
     stub_request(:get, "https://rubygems.org/gems/rails-1.0.0.gem")

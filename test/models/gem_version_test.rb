@@ -85,12 +85,12 @@ class GemVersionTest < ActiveSupport::TestCase
     assert_not gem_version.cached?
   end
 
-  test "available? returns true for approved versions" do
+  test "available? returns true for approved versions without QuarantinedVersion" do
     gem_version = build(:gem_version, :approved)
     assert gem_version.available?
   end
 
-  test "available? returns true for expired quarantine" do
+  test "available? returns true for expired quarantine without QuarantinedVersion" do
     gem_version = build(:gem_version, :expired_quarantine)
     assert gem_version.available?
   end
@@ -100,12 +100,29 @@ class GemVersionTest < ActiveSupport::TestCase
     assert_not gem_version.available?
   end
 
-  test "actively_quarantined? returns false for approved versions" do
+  test "available? returns false for blocked versions" do
+    gem_version = build(:gem_version, :blocked)
+    assert_not gem_version.available?,
+      "Blocked gems should never be available"
+  end
+
+  test "available? returns false when QuarantinedVersion exists even if GemVersion is approved" do
+    gem_package = create(:gem_package, name: "quarantined-approved")
+    gem_version = create(:gem_version, :approved, gem_package: gem_package, version: "2.0.0", platform: "ruby")
+
+    # Manually add to quarantine (simulating admin action)
+    create(:quarantined_version, name: "quarantined-approved", version: "2.0.0", platform: "ruby")
+
+    assert_not gem_version.available?,
+      "Should not be available when QuarantinedVersion exists, even if GemVersion.status is approved"
+  end
+
+  test "actively_quarantined? returns false for approved versions without QuarantinedVersion" do
     gem_version = build(:gem_version, :approved)
     assert_not gem_version.actively_quarantined?
   end
 
-  test "actively_quarantined? returns false when published_at is old" do
+  test "actively_quarantined? returns false when published_at is old and no QuarantinedVersion" do
     gem_version = build(:gem_version, status: :quarantined, published_at: 1.year.ago)
     assert_not gem_version.actively_quarantined?
   end
@@ -113,6 +130,28 @@ class GemVersionTest < ActiveSupport::TestCase
   test "actively_quarantined? returns true when recently published" do
     gem_version = build(:gem_version, status: :quarantined, published_at: 1.hour.ago)
     assert gem_version.actively_quarantined?
+  end
+
+  test "actively_quarantined? returns true when QuarantinedVersion exists even if GemVersion is approved" do
+    gem_package = create(:gem_package, name: "sneaky-gem")
+    gem_version = create(:gem_version, :approved, gem_package: gem_package, version: "1.0.0", platform: "ruby")
+
+    # Manually create QuarantinedVersion (simulating admin action)
+    create(:quarantined_version, name: "sneaky-gem", version: "1.0.0", platform: "ruby")
+
+    assert gem_version.actively_quarantined?,
+      "Should be quarantined when QuarantinedVersion exists, regardless of GemVersion.status"
+  end
+
+  test "actively_quarantined? returns false when QuarantinedVersion is expired" do
+    gem_package = create(:gem_package, name: "old-gem")
+    gem_version = create(:gem_version, :approved, gem_package: gem_package, version: "1.0.0", platform: "ruby")
+
+    # Create expired QuarantinedVersion
+    create(:quarantined_version, :expired, name: "old-gem", version: "1.0.0", platform: "ruby")
+
+    assert_not gem_version.actively_quarantined?,
+      "Should not be quarantined when QuarantinedVersion is expired"
   end
 
   test "gem_name delegates to gem_package" do

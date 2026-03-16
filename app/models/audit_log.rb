@@ -7,6 +7,7 @@ class AuditLog < ApplicationRecord
   scope :for_gem, ->(name) { where(gem_name: name) }
   scope :downloads, -> { where(action: "download") }
   scope :spec_requests, -> { where(action: "spec_request") }
+  scope :compact_index_requests, -> { where(action: "compact_index_request") }
 
   def self.log_download(gem_name:, version:, request:)
     create!(
@@ -36,6 +37,17 @@ class AuditLog < ApplicationRecord
       gem_name: gem_name,
       version: version,
       action: "gemspec_request",
+      ip_address: request.remote_ip,
+      user_agent: request.user_agent,
+      bundle_version: extract_bundler_version(request.user_agent),
+      requested_at: Time.current
+    )
+  end
+
+  def self.log_compact_index_request(request:, endpoint:, gem_name: nil)
+    create!(
+      gem_name: gem_name || endpoint,
+      action: "compact_index_request",
       ip_address: request.remote_ip,
       user_agent: request.user_agent,
       bundle_version: extract_bundler_version(request.user_agent),

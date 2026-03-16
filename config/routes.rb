@@ -11,6 +11,7 @@ Rails.application.routes.draw do
   get "versions", to: "api/compact_index#versions"
   get "info/:name", to: "api/compact_index#info", constraints: {name: /[^\/]+/}
   get "names", to: "api/compact_index#names"
+  get "api/v1/dependencies", to: "api/dependencies#index"
 
   # Admin interface
   namespace :admin do

@@ -35,10 +35,15 @@ class GemVersion < ApplicationRecord
   end
 
   def available?
-    approved? || !actively_quarantined?
+    !blocked? && !actively_quarantined?
   end
 
   def actively_quarantined?
+    # Check QuarantinedVersion table first - this is the source of truth
+    # for what's actually quarantined (includes manual quarantines)
+    return true if QuarantinedVersion.quarantined?(gem_name, version, platform)
+
+    # Also check if this GemVersion has quarantined status and is within quarantine period
     return false unless quarantined?
     return false if published_at.nil?
 

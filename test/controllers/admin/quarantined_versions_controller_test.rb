@@ -60,6 +60,24 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
     assert_select "td", text: /test-gem/, count: 0
   end
 
+  test "index filters by used or installed gems only" do
+    create(:gem_package, name: "test-gem")
+    create(:quarantined_version, name: "unused-gem", version: "2.0.0")
+
+    get admin_quarantined_versions_path, params: {usage: "used"}
+
+    assert_response :success
+    assert_select "td", text: /test-gem/
+    assert_select "td", text: /unused-gem/, count: 0
+  end
+
+  test "index shows clear filters link when usage filter is active" do
+    get admin_quarantined_versions_path, params: {usage: "used"}
+
+    assert_response :success
+    assert_select "a", text: "Clear"
+  end
+
   test "index shows stats" do
     create(:quarantined_version, :expired, name: "old-gem", version: "1.0.0")
 

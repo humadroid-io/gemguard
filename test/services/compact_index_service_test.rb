@@ -39,12 +39,27 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
   test "sync_versions filters quarantined versions" do
     create(:quarantined_version, name: "rails", version: "7.1.0", platform: "ruby")
     stub_versions_request
+    stub_info_request("rails")
 
     @service.sync_versions
 
     content = File.read(@storage_path.join("versions"))
     assert_includes content, "rails 7.0.0,7.2.0"
     assert_not_includes content, "7.1.0"
+  end
+
+  test "sync_versions updates checksum to match filtered info content" do
+    create(:quarantined_version, name: "rails", version: "7.1.0", platform: "ruby")
+    stub_versions_request
+    stub_info_request("rails")
+
+    @service.sync_versions
+
+    filtered_info = File.read(@storage_path.join("info", "rails"))
+    expected_checksum = Digest::MD5.hexdigest(filtered_info)
+    versions_line = File.read(@storage_path.join("versions")).lines.find { |line| line.start_with?("rails ") }
+
+    assert_includes versions_line, expected_checksum
   end
 
   test "sync_versions removes gem line entirely if all versions quarantined" do

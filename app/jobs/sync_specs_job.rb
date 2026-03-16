@@ -55,6 +55,7 @@ class SyncSpecsJob < ApplicationJob
         else
           # 3. Add new versions to quarantine
           track_new_versions(new_versions)
+          enqueue_metadata_refresh_for_tracked_gems(new_versions)
         end
       end
     else
@@ -123,6 +124,15 @@ class SyncSpecsJob < ApplicationJob
     )
 
     Rails.logger.info("SyncSpecsJob: Added #{records.size} versions to quarantine")
+  end
+
+  def enqueue_metadata_refresh_for_tracked_gems(versions)
+    gem_names = versions.map(&:first).uniq
+    tracked_names = GemPackage.tracked.where(name: gem_names).pluck(:name)
+    return if tracked_names.empty?
+
+    RefreshGemMetadataJob.perform_later(tracked_names)
+    Rails.logger.info("SyncSpecsJob: Enqueued metadata refresh for #{tracked_names.size} tracked gems")
   end
 
   def save_raw_specs(type, data)

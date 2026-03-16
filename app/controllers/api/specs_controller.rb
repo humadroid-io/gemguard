@@ -55,8 +55,16 @@ module Api
     end
 
     def serve_file(path, filename, stale: false)
+      etag = Digest::MD5.file(path).hexdigest
+
+      # Handle conditional GET - return 304 if content unchanged
+      if request.headers["If-None-Match"] == %("#{etag}")
+        head :not_modified
+        return
+      end
+
       AuditLog.log_spec_request(request: request, spec_type: filename)
-      set_cache_headers(File.mtime(path))
+      set_cache_headers(File.mtime(path), etag)
 
       # Indicate when serving stale data (upstream unavailable)
       if stale
@@ -160,10 +168,12 @@ module Api
       File.mtime(path) > 5.minutes.ago
     end
 
-    def set_cache_headers(last_modified)
+    def set_cache_headers(last_modified, etag)
+      response.headers["ETag"] = %("#{etag}")
       response.headers["Last-Modified"] = last_modified.httpdate
-      response.headers["Cache-Control"] = "public, max-age=300"
-      expires_in 5.minutes, public: true
+      # Force revalidation - bundler must check with GemGuard before using cached data
+      # This ensures quarantine changes take effect immediately
+      response.headers["Cache-Control"] = "public, no-cache"
     end
 
     def filtered_specs_path

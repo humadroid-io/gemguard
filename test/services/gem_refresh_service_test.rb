@@ -103,6 +103,55 @@ class GemRefreshServiceTest < ActiveSupport::TestCase
     assert version.approved?
   end
 
+  test "removes accidental quarantine for old existing versions once published date is known" do
+    version = create(:gem_version, :approved, gem_package: @gem_package, version: "6.0.0", platform: "ruby", published_at: nil)
+    create(:quarantined_version, name: "rails", version: "6.0.0", platform: "ruby", first_seen_at: 1.hour.ago)
+
+    stub_gem_info("rails")
+    stub_versions("rails", [
+      {"number" => "6.0.0", "platform" => "ruby", "created_at" => 2.years.ago.iso8601}
+    ])
+
+    service = GemRefreshService.new(@gem_package)
+    assert service.call
+
+    version.reload
+    assert version.approved?
+    assert_not QuarantinedVersion.exists?(name: "rails", version: "6.0.0", platform: "ruby")
+  end
+
+  test "removes accidental quarantine for newly created old versions" do
+    create(:quarantined_version, name: "rails", version: "6.0.0", platform: "ruby", first_seen_at: 10.minutes.ago)
+
+    stub_gem_info("rails")
+    stub_versions("rails", [
+      {"number" => "6.0.0", "platform" => "ruby", "created_at" => 2.years.ago.iso8601}
+    ])
+
+    service = GemRefreshService.new(@gem_package)
+    assert service.call
+
+    version = @gem_package.versions.find_by(version: "6.0.0", platform: "ruby")
+    assert version.approved?
+    assert_not QuarantinedVersion.exists?(name: "rails", version: "6.0.0", platform: "ruby")
+  end
+
+  test "adds quarantine for existing recent versions once published date is known" do
+    version = create(:gem_version, :approved, gem_package: @gem_package, version: "7.2.0", platform: "ruby", published_at: nil)
+
+    stub_gem_info("rails")
+    stub_versions("rails", [
+      {"number" => "7.2.0", "platform" => "ruby", "created_at" => 1.hour.ago.iso8601}
+    ])
+
+    service = GemRefreshService.new(@gem_package)
+    assert service.call
+
+    version.reload
+    assert version.quarantined?
+    assert QuarantinedVersion.exists?(name: "rails", version: "7.2.0", platform: "ruby")
+  end
+
   test "handles empty versions list (all yanked)" do
     # RubyGems API simply excludes yanked versions from the response
     stub_gem_info("rails")

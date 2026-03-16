@@ -113,6 +113,49 @@ class Api::CompactIndexControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "rails"
   end
 
+  test "versions returns 304 when If-None-Match matches ETag" do
+    write_versions_file(@versions_content)
+
+    # First request to get the ETag
+    get "/versions"
+    assert_response :success
+    etag = response.headers["ETag"]
+    assert etag.present?
+
+    # Second request with If-None-Match should return 304
+    get "/versions", headers: {"If-None-Match" => etag}
+    assert_response :not_modified
+  end
+
+  test "versions returns full content when If-None-Match does not match" do
+    write_versions_file(@versions_content)
+
+    get "/versions", headers: {"If-None-Match" => '"wrong-etag"'}
+
+    assert_response :success
+    assert_includes response.body, "rails"
+  end
+
+  test "versions uses no-cache to force revalidation" do
+    write_versions_file(@versions_content)
+
+    get "/versions"
+
+    assert_response :success
+    assert_equal "public, no-cache", response.headers["Cache-Control"],
+      "Cache-Control should force revalidation so quarantine changes take effect immediately"
+  end
+
+  test "info returns 304 when If-None-Match matches ETag" do
+    write_info_file("rails", @info_content)
+
+    get "/info/rails"
+    etag = response.headers["ETag"]
+
+    get "/info/rails", headers: {"If-None-Match" => etag}
+    assert_response :not_modified
+  end
+
   private
 
   def write_versions_file(content)

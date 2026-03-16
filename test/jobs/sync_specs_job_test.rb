@@ -273,6 +273,48 @@ class SyncSpecsJobTest < ActiveJob::TestCase
     end
   end
 
+  test "enqueues metadata refresh for tracked gems with newly detected versions" do
+    create(:gem_package, name: "rails", tracked_at: Time.current)
+    create(:gem_package, name: "rack", tracked_at: nil)
+
+    previous_specs = [
+      ["rails", Gem::Version.new("7.0.0"), "ruby"],
+      ["rack", Gem::Version.new("3.0.0"), "ruby"]
+    ]
+    save_raw_specs(:all, gzipped_specs(previous_specs))
+
+    current_specs = [
+      ["rails", Gem::Version.new("7.0.0"), "ruby"],
+      ["rails", Gem::Version.new("7.1.0"), "ruby"],
+      ["rack", Gem::Version.new("3.0.0"), "ruby"],
+      ["rack", Gem::Version.new("3.1.0"), "ruby"]
+    ]
+
+    stub_request(:get, "https://rubygems.org/specs.4.8.gz")
+      .to_return(status: 200, body: gzipped_specs(current_specs))
+
+    assert_enqueued_with(job: RefreshGemMetadataJob, args: [["rails"]]) do
+      SyncSpecsJob.perform_now
+    end
+  end
+
+  test "does not enqueue metadata refresh for untracked gems" do
+    previous_specs = [["rack", Gem::Version.new("3.0.0"), "ruby"]]
+    save_raw_specs(:all, gzipped_specs(previous_specs))
+
+    current_specs = [
+      ["rack", Gem::Version.new("3.0.0"), "ruby"],
+      ["rack", Gem::Version.new("3.1.0"), "ruby"]
+    ]
+
+    stub_request(:get, "https://rubygems.org/specs.4.8.gz")
+      .to_return(status: 200, body: gzipped_specs(current_specs))
+
+    assert_no_enqueued_jobs(only: RefreshGemMetadataJob) do
+      SyncSpecsJob.perform_now
+    end
+  end
+
   private
 
   def save_raw_specs(type, data)

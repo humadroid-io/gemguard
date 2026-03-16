@@ -54,6 +54,30 @@ class Api::GemspecsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "300", response.headers["Retry-After"]
   end
 
+  test "show returns 503 when QuarantinedVersion exists even if GemVersion is approved" do
+    # CRITICAL: ensures manual quarantine via admin UI blocks gemspec downloads
+    create(:gem_version, :approved, gem_package: @gem_package, version: "1.0.0")
+    create(:quarantined_version, name: "rails", version: "1.0.0", platform: "ruby")
+
+    get "/quick/Marshal.4.8/rails-1.0.0.gemspec.rz"
+
+    assert_response :service_unavailable,
+      "Should block gemspec when QuarantinedVersion exists, regardless of GemVersion.status"
+    assert_equal "300", response.headers["Retry-After"]
+  end
+
+  test "show serves gemspec when QuarantinedVersion is expired" do
+    create(:gem_version, :approved, gem_package: @gem_package, version: "1.0.0")
+    create(:quarantined_version, :expired, name: "rails", version: "1.0.0", platform: "ruby")
+    stub_request(:get, "https://rubygems.org/quick/Marshal.4.8/rails-1.0.0.gemspec.rz")
+      .to_return(status: 200, body: "gemspec content")
+
+    get "/quick/Marshal.4.8/rails-1.0.0.gemspec.rz"
+
+    assert_response :success,
+      "Should serve gemspec when QuarantinedVersion is expired"
+  end
+
   test "show serves approved gemspec" do
     create(:gem_version, :approved, gem_package: @gem_package, version: "1.0.0")
     stub_request(:get, "https://rubygems.org/quick/Marshal.4.8/rails-1.0.0.gemspec.rz")

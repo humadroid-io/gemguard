@@ -1,8 +1,16 @@
 module Api
   class BaseController < ActionController::API
+    before_action :ensure_bootstrapped
     before_action :log_request
 
     private
+
+    def ensure_bootstrapped
+      return if Setting.baseline_imported?
+
+      # Queue baseline import (only once - job deduplication prevents multiple runs)
+      ImportSpecsBaselineJob.perform_later(include_prerelease: true)
+    end
 
     def log_request
       # Subclasses override to log specific actions

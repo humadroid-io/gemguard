@@ -80,14 +80,16 @@ class GemRefreshService
     existing = gem_package.versions.find_by(version: version, platform: platform)
 
     if existing
-      # Update existing version's published_at if missing
-      existing.update!(published_at: published_at) if existing.published_at.nil? && published_at
+      update_attrs = {}
+      update_attrs[:published_at] = published_at if published_at && existing.published_at != published_at
+      existing.update!(update_attrs) if update_attrs.any?
+      reconcile_quarantine_state!(existing, published_at)
     else
       # Create new version
       is_new = published_at && published_at > Setting.quarantine_period.ago
       status = is_new ? :quarantined : :approved
 
-      gem_package.versions.create!(
+      gem_version = gem_package.versions.create!(
         version: version,
         platform: platform,
         published_at: published_at,
@@ -95,16 +97,7 @@ class GemRefreshService
         status: status
       )
 
-      # Add to QuarantinedVersion if quarantined
-      if status == :quarantined
-        QuarantinedVersion.find_or_create_by!(
-          name: gem_package.name,
-          version: version,
-          platform: platform
-        ) do |qv|
-          qv.first_seen_at = Time.current
-        end
-      end
+      reconcile_quarantine_state!(gem_version, published_at)
 
       @new_versions_count += 1
     end
@@ -119,5 +112,34 @@ class GemRefreshService
     Time.parse(value)
   rescue ArgumentError
     nil
+  end
+
+  def reconcile_quarantine_state!(gem_version, published_at)
+    return unless published_at
+
+    quarantine_record = QuarantinedVersion.find_by(
+      name: gem_package.name,
+      version: gem_version.version,
+      platform: gem_version.platform
+    )
+
+    if published_at > Setting.quarantine_period.ago
+      unless gem_version.blocked? || gem_version.quarantined?
+        gem_version.update!(status: :quarantined)
+      end
+
+      return if quarantine_record.present?
+
+      QuarantinedVersion.find_or_create_by!(
+        name: gem_package.name,
+        version: gem_version.version,
+        platform: gem_version.platform,
+      ) do |qv|
+        qv.first_seen_at = gem_version.first_seen_at || Time.current
+      end
+    else
+      gem_version.update!(status: :approved) if gem_version.quarantined?
+      quarantine_record&.destroy unless gem_version.blocked?
+    end
   end
 end

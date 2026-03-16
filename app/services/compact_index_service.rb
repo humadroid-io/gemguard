@@ -12,24 +12,35 @@ class CompactIndexService
       new.sync_names
     end
 
+    def regenerate_versions
+      new.regenerate_versions
+    end
+
     def storage_path
       Rails.root.join("storage", "compact_index")
+    end
+
+    def raw_storage_path
+      Rails.root.join("storage", "compact_index", "raw")
     end
   end
 
   def sync_versions
     upstream_url = "#{Setting.upstream_source}/versions"
-    response = fetch_with_etag(upstream_url, versions_path)
+    response = fetch_with_etag(upstream_url, raw_versions_path)
 
     return false unless response
 
     if response.is_a?(String)
-      # Got new content, filter and save
+      # Got new content - save raw and filter
+      write_file(raw_versions_path, response)
       filtered = filter_versions(response)
       write_file(versions_path, filtered)
-    elsif File.exist?(versions_path)
-      # 304 Not Modified, touch the file
-      FileUtils.touch(versions_path)
+    elsif File.exist?(raw_versions_path)
+      # 304 Not Modified - re-filter from raw (quarantine status may have changed)
+      raw_content = File.read(raw_versions_path)
+      filtered = filter_versions(raw_content)
+      write_file(versions_path, filtered)
     end
 
     true
@@ -38,21 +49,39 @@ class CompactIndexService
     false
   end
 
+  def regenerate_versions
+    return false unless File.exist?(raw_versions_path)
+
+    raw_content = File.read(raw_versions_path)
+    filtered = filter_versions(raw_content)
+    write_file(versions_path, filtered)
+
+    Rails.logger.info("CompactIndexService: Regenerated versions from raw cache")
+    true
+  rescue => e
+    Rails.logger.error("CompactIndexService#regenerate_versions failed: #{e.message}")
+    false
+  end
+
   def sync_info(gem_name)
     upstream_url = "#{Setting.upstream_source}/info/#{gem_name}"
     info_file_path = info_path(gem_name)
+    raw_info_file_path = raw_info_path(gem_name)
 
-    response = fetch_with_etag(upstream_url, info_file_path)
+    response = fetch_with_etag(upstream_url, raw_info_file_path)
 
     return false unless response
 
     if response.is_a?(String)
-      # Got new content, filter and save
+      # Got new content - save raw and filter
+      write_file(raw_info_file_path, response)
       filtered = filter_info(gem_name, response)
       write_file(info_file_path, filtered)
-    elsif File.exist?(info_file_path)
-      # 304 Not Modified, touch the file
-      FileUtils.touch(info_file_path)
+    elsif File.exist?(raw_info_file_path)
+      # 304 Not Modified - re-filter from raw (quarantine status may have changed)
+      raw_content = File.read(raw_info_file_path)
+      filtered = filter_info(gem_name, raw_content)
+      write_file(info_file_path, filtered)
     end
 
     true
@@ -136,22 +165,18 @@ class CompactIndexService
 
     # Check if any versions of this gem are quarantined
     gem_quarantined = quarantined[gem_name]
-    return line unless gem_quarantined
+    return line unless gem_quarantined&.any?
 
     # Filter out quarantined versions
     versions = versions_str.split(",")
-    filtered_versions = versions.reject do |v|
-      # Version might have platform suffix like "1.0.0-java"
-      version, platform = parse_version_platform(v)
-      platform ||= "ruby"
-      gem_quarantined.include?([version, platform])
-    end
+    filtered_versions = versions.reject { |version_token| quarantined_version_token?(gem_quarantined, version_token) }
 
     return nil if filtered_versions.empty?
 
-    # Rebuild line with filtered versions
-    # Note: checksum would ideally be recalculated, but we keep original for simplicity
-    "#{gem_name} #{filtered_versions.join(",")} #{checksum}"
+    filtered_checksum = filtered_info_checksum(gem_name)
+    return nil unless filtered_checksum
+
+    "#{gem_name} #{filtered_versions.join(",")} #{filtered_checksum}"
   end
 
   def filter_info(gem_name, content)
@@ -176,24 +201,50 @@ class CompactIndexService
       version_part = line.split(" ").first
       next false unless version_part
 
-      version, platform = parse_version_platform(version_part)
-      platform ||= "ruby"
-      quarantined.include?([version, platform])
+      quarantined_version_token?(quarantined, version_part)
     end
 
     (header + filtered_body).join
   end
 
-  def parse_version_platform(version_str)
-    # Handle versions like "1.0.0" or "1.0.0-x86_64-linux"
-    # Platform comes after version, separated by hyphen, but version can have hyphens too
-    # Strategy: platform starts with known patterns or after version pattern ends
+  def quarantined_version_token?(quarantined_versions, version_token)
+    quarantined_versions.any? do |version, platform|
+      version_token == version || version_token == "#{version}-#{platform}"
+    end
+  end
 
-    # Simple approach: if it matches version-platform pattern
-    if version_str =~ /^(.+?)-(java|x86_64-linux|x86_64-darwin|arm64-darwin|x64-mingw.*|mswin.*)$/
-      [$1, $2]
+  def filtered_info_checksum(gem_name)
+    @filtered_info_checksums ||= {}
+    return @filtered_info_checksums[gem_name] if @filtered_info_checksums.key?(gem_name)
+
+    raw_content = ensure_raw_info_content(gem_name)
+    unless raw_content
+      Rails.logger.warn("CompactIndexService: Could not load raw info for #{gem_name}, omitting from filtered versions")
+      @filtered_info_checksums[gem_name] = nil
+      return nil
+    end
+
+    filtered_content = filter_info(gem_name, raw_content)
+    write_file(info_path(gem_name), filtered_content)
+
+    @filtered_info_checksums[gem_name] = Digest::MD5.hexdigest(filtered_content)
+  end
+
+  def ensure_raw_info_content(gem_name)
+    raw_path = raw_info_path(gem_name)
+    return File.read(raw_path) if File.exist?(raw_path)
+
+    upstream_url = "#{Setting.upstream_source}/info/#{gem_name}"
+    response = fetch_with_etag(upstream_url, raw_path)
+
+    case response
+    when String
+      write_file(raw_path, response)
+      response
+    when :not_modified
+      File.exist?(raw_path) ? File.read(raw_path) : nil
     else
-      [version_str, nil]
+      nil
     end
   end
 
@@ -218,11 +269,19 @@ class CompactIndexService
     self.class.storage_path.join("versions")
   end
 
+  def raw_versions_path
+    self.class.raw_storage_path.join("versions")
+  end
+
   def names_path
     self.class.storage_path.join("names")
   end
 
   def info_path(gem_name)
     self.class.storage_path.join("info", gem_name)
+  end
+
+  def raw_info_path(gem_name)
+    self.class.raw_storage_path.join("info", gem_name)
   end
 end

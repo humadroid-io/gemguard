@@ -4,10 +4,14 @@ class SyncCompactIndexJob < ApplicationJob
   # Limit concurrency to avoid multiple syncs of the same type
   limits_concurrency to: 1, key: ->(options = {}) { options[:type] || options["type"] || :versions }
 
-  def perform(type: :versions)
+  def perform(type: :versions, regenerate_only: false)
     case type.to_sym
     when :versions
-      CompactIndexService.sync_versions
+      if regenerate_only
+        CompactIndexService.regenerate_versions
+      else
+        CompactIndexService.sync_versions
+      end
     when :names
       CompactIndexService.sync_names
     else

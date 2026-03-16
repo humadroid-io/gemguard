@@ -20,6 +20,10 @@ module Admin
         end
       end
 
+      if params[:usage] == "used"
+        scope = scope.where(name: GemPackage.select(:name))
+      end
+
       @pagy, @quarantined_versions = pagy(scope, limit: 50)
     end
 

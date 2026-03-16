@@ -59,6 +59,17 @@ class RubygemsClient
       false
     end
 
+    def fetch_dependencies(gems)
+      response = get(
+        "/api/v1/dependencies",
+        query: {gems: Array(gems).join(",")},
+        timeout: 30
+      )
+      return nil unless response.success?
+
+      response.body
+    end
+
     # Parses RubyGems specs from gzipped Marshal data.
     #
     # Security note: Marshal.load is required here because RubyGems uses Marshal
@@ -77,6 +88,18 @@ class RubygemsClient
       Marshal.load(gz.read)
     rescue => e
       Rails.logger.error("Failed to parse specs: #{e.message}")
+      []
+    end
+    # rubocop:enable Security/MarshalLoad
+
+    # The dependency API returns a Marshal-serialized array of hashes.
+    # rubocop:disable Security/MarshalLoad
+    def parse_dependencies(payload)
+      return [] unless payload
+
+      Marshal.load(payload)
+    rescue => e
+      Rails.logger.error("Failed to parse dependencies: #{e.message}")
       []
     end
     # rubocop:enable Security/MarshalLoad

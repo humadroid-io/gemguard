@@ -52,6 +52,10 @@ module Admin
         platform: @version.platform
       ).destroy_all
 
+      # Explicitly invalidate compact index info (destroy_all triggers callbacks,
+      # but we ensure info file is cleared for immediate visibility)
+      invalidate_compact_index_info(@gem_package.name)
+
       redirect_to admin_gem_package_path(@gem_package), notice: "Version #{@version.version} approved"
     end
 
@@ -61,13 +65,20 @@ module Admin
       @version.update!(status: :blocked)
 
       # Ensure it's in quarantine so it's excluded from specs
-      # QuarantinedVersion callback handles specs regeneration
-      QuarantinedVersion.find_or_create_by!(
+      qv = QuarantinedVersion.find_or_initialize_by(
         name: @gem_package.name,
         version: @version.version,
         platform: @version.platform
-      ) do |qv|
+      )
+
+      if qv.new_record?
+        # New record - save will trigger callbacks for specs regeneration
         qv.first_seen_at = Time.current
+        qv.save!
+      else
+        # Already exists - callbacks won't fire, so manually trigger regeneration
+        regenerate_specs
+        invalidate_compact_index_info(@gem_package.name)
       end
 
       redirect_to admin_gem_package_path(@gem_package), notice: "Version #{@version.version} blocked"
@@ -88,6 +99,19 @@ module Admin
       %i[all latest prerelease].each do |type|
         RegenerateFilteredSpecsJob.perform_later(type: type)
       end
+
+      # Also sync compact index versions
+      SyncCompactIndexJob.perform_later(type: :versions)
+    end
+
+    def invalidate_compact_index_info(gem_name)
+      info_path = Rails.root.join("storage", "compact_index", "info", gem_name)
+      etag_path = "#{info_path}.etag"
+
+      FileUtils.rm_f(info_path)
+      FileUtils.rm_f(etag_path)
+
+      Rails.logger.info("GemPackagesController: Invalidated compact index info for #{gem_name}")
     end
   end
 end

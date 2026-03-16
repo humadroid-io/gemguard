@@ -8,6 +8,7 @@ module Api
 
       return head :not_found unless File.exist?(path)
 
+      log_compact_index_request(endpoint: "versions")
       serve_compact_index_file(path, stale: stale)
     end
 
@@ -20,6 +21,7 @@ module Api
       path, stale = ensure_info_file(gem_name)
       return head :not_found unless path && File.exist?(path)
 
+      log_compact_index_request(endpoint: "info", gem_name: gem_name)
       serve_compact_index_file(path, stale: stale)
     end
 
@@ -35,6 +37,7 @@ module Api
 
       return head :not_found unless File.exist?(path)
 
+      log_compact_index_request(endpoint: "names")
       serve_compact_index_file(path, stale: stale)
     end
 
@@ -45,7 +48,15 @@ module Api
     end
 
     def serve_compact_index_file(path, stale: false)
-      set_cache_headers(path)
+      etag = Digest::MD5.file(path).hexdigest
+
+      # Handle conditional GET - return 304 if content unchanged
+      if request.headers["If-None-Match"] == %("#{etag}")
+        head :not_modified
+        return
+      end
+
+      set_cache_headers(path, etag)
 
       if stale
         response.headers["X-GemGuard-Stale"] = "true"
@@ -102,10 +113,20 @@ module Api
       File.mtime(path) < Setting.sync_interval_minutes.minutes.ago
     end
 
-    def set_cache_headers(path)
-      response.headers["ETag"] = Digest::MD5.file(path).hexdigest
+    def set_cache_headers(path, etag)
+      response.headers["ETag"] = %("#{etag}")
       response.headers["Last-Modified"] = File.mtime(path).httpdate
-      response.headers["Cache-Control"] = "public, max-age=#{Setting.sync_interval_minutes * 60}"
+      # Force revalidation - bundler must check with GemGuard before using cached data
+      # This ensures quarantine changes take effect immediately
+      response.headers["Cache-Control"] = "public, no-cache"
+    end
+
+    def log_compact_index_request(endpoint:, gem_name: nil)
+      AuditLog.log_compact_index_request(
+        request: request,
+        endpoint: endpoint,
+        gem_name: gem_name
+      )
     end
   end
 end
