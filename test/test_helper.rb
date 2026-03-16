@@ -122,6 +122,9 @@ module ActiveSupport
 
     # Clean database between tests
     setup do
+      AppDependencyEdge.delete_all if defined?(AppDependencyEdge)
+      AppGemVersion.delete_all if defined?(AppGemVersion)
+      ManagedApp.delete_all if defined?(ManagedApp)
       GemPackage.delete_all
       GemVersion.delete_all
       QuarantineRule.delete_all

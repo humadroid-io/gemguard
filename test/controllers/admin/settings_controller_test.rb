@@ -6,6 +6,16 @@ class Admin::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "show creates default app on first access" do
+    assert_difference "ManagedApp.count", 1 do
+      get admin_settings_path
+    end
+
+    app = ManagedApp.last
+    assert_equal "Default App", app.name
+    assert_equal "default", app.slug
+  end
+
   test "show displays current settings" do
     get admin_settings_path
 

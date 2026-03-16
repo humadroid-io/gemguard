@@ -1,21 +1,26 @@
 class LockfileImporter
-  Result = Struct.new(:imported, :existing, :queued, keyword_init: true)
+  Result = Struct.new(:imported, :existing, :queued, :app_gems, keyword_init: true)
 
-  def self.import(content)
-    new(content).import
+  def self.import(content, managed_app: nil)
+    new(content, managed_app: managed_app).import
   end
 
-  def initialize(content)
+  def initialize(content, managed_app: nil)
     @content = content
+    @managed_app = managed_app
   end
 
   def import
-    gems = parse_lockfile
+    specs, direct_dependencies = parse_lockfile
     imported = 0
     existing = 0
     gem_names = Set.new
+    resolved_versions = {}
 
-    gems.each do |name, version, platform|
+    specs.each do |spec|
+      name = spec.name
+      version = spec.version.to_s
+      platform = normalize_platform(spec.platform)
       gem_names << name
 
       gem_package = GemPackage.find_or_create_by!(name: name)
@@ -32,77 +37,72 @@ class LockfileImporter
       else
         existing += 1
       end
+
+      resolved_versions[[name, platform]] = gem_version
+      resolved_versions[[name, "ruby"]] ||= gem_version if platform == "ruby"
     rescue => e
       Rails.logger.error("LockfileImporter error for #{name}: #{e.message}")
     end
 
+    sync_managed_app!(specs, direct_dependencies, resolved_versions) if @managed_app
+
     # Queue ONE background job to refresh all imported gems
     ImportLockfileJob.perform_later(gem_names.to_a)
 
-    Result.new(imported: imported, existing: existing, queued: gem_names.size)
+    Result.new(imported: imported, existing: existing, queued: gem_names.size, app_gems: @managed_app ? specs.size : 0)
   end
 
   private
 
   def parse_lockfile
-    gems = []
-    in_gems_section = false
-    in_specs = false
-
-    @content.each_line do |line|
-      if line.strip == "GEM"
-        in_gems_section = true
-        in_specs = false
-        next
-      end
-
-      if in_gems_section && line.strip == "specs:"
-        in_specs = true
-        next
-      end
-
-      if line.strip.empty? || (line =~ /^[A-Z]+$/ && line.strip != "GEM")
-        in_gems_section = false if in_gems_section
-        in_specs = false
-        next
-      end
-
-      next unless in_gems_section && in_specs
-
-      # Match gem entries: "    rails (7.1.0)" or "    nokogiri (1.16.0-x86_64-linux)"
-      # Only top-level gems (4 spaces), skip dependencies (6+ spaces)
-      if line =~ /^    (\S+)\s+\(([^)]+)\)$/
-        name = $1
-        version_str = $2
-
-        version, platform = parse_version_platform(version_str)
-        gems << [name, version, platform]
-      end
-    end
-
-    gems
+    parser = Bundler::LockfileParser.new(@content)
+    [parser.specs, parser.dependencies.keys.to_set]
   end
 
-  def parse_version_platform(version_str)
-    platform_patterns = %w[
-      x86_64-linux x86_64-linux-gnu x86_64-linux-musl
-      aarch64-linux aarch64-linux-gnu aarch64-linux-musl
-      x86_64-darwin arm64-darwin
-      x64-mingw32 x64-mingw-ucrt
-      java jruby
-    ]
+  def sync_managed_app!(specs, direct_dependencies, resolved_versions)
+    current_gem_version_ids = resolved_versions.values.uniq.map(&:id)
 
-    platform_patterns.each do |platform|
-      if version_str.end_with?("-#{platform}")
-        version = version_str.chomp("-#{platform}")
-        return [version, platform]
+    @managed_app.transaction do
+      @managed_app.app_dependency_edges.delete_all
+
+      current_gem_version_ids.each do |gem_version_id|
+        direct = specs.any? do |spec|
+          resolved_versions[[spec.name, normalize_platform(spec.platform)]]&.id == gem_version_id &&
+            direct_dependencies.include?(spec.name)
+        end
+
+        app_gem_version = @managed_app.app_gem_versions.find_or_initialize_by(gem_version_id: gem_version_id)
+        app_gem_version.direct = direct
+        app_gem_version.save!
+      end
+
+      @managed_app.app_gem_versions.where.not(gem_version_id: current_gem_version_ids).delete_all
+
+      specs.each do |spec|
+        parent = resolved_versions[[spec.name, normalize_platform(spec.platform)]]
+        next unless parent
+
+        spec.dependencies.each do |dependency|
+          child = resolve_dependency_version(resolved_versions, dependency.name)
+          next unless child
+
+          @managed_app.app_dependency_edges.create!(
+            parent_gem_version: parent,
+            child_gem_version: child,
+            requirement: dependency.requirement.to_s
+          )
+        end
       end
     end
+  end
 
-    if version_str =~ /^(.+)-((?:x86_64|arm64)-darwin-\d+)$/
-      return [$1, $2]
-    end
+  def resolve_dependency_version(resolved_versions, dependency_name)
+    resolved_versions[[dependency_name, "ruby"]] ||
+      resolved_versions.find { |(name, _platform), _version| name == dependency_name }&.last
+  end
 
-    [version_str, "ruby"]
+  def normalize_platform(platform)
+    platform_string = platform.to_s
+    platform_string.present? ? platform_string : "ruby"
   end
 end

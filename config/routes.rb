@@ -16,6 +16,11 @@ Rails.application.routes.draw do
   # Admin interface
   namespace :admin do
     root to: "dashboard#index"
+    resources :apps do
+      member do
+        post :import_lockfile
+      end
+    end
     resources :gem_packages, only: [:index, :show] do
       member do
         post :refresh

@@ -23,6 +23,10 @@ module Admin
     def show
       @gem_package = GemPackage.find(params[:id])
       @versions = @gem_package.versions.order(published_at: :desc)
+      @apps_using_gem = ManagedApp.joins(gem_versions: :gem_package)
+        .where(gem_packages: {id: @gem_package.id})
+        .distinct
+        .order(:name)
     end
 
     def refresh

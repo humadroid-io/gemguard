@@ -1,5 +1,9 @@
 class GemVersion < ApplicationRecord
   belongs_to :gem_package
+  has_many :app_gem_versions, dependent: :destroy
+  has_many :managed_apps, through: :app_gem_versions
+  has_many :parent_dependency_edges, class_name: "AppDependencyEdge", foreign_key: :parent_gem_version_id, dependent: :destroy
+  has_many :child_dependency_edges, class_name: "AppDependencyEdge", foreign_key: :child_gem_version_id, dependent: :destroy
 
   enum :status, {quarantined: 0, approved: 1, blocked: 2}
 

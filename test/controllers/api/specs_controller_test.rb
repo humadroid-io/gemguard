@@ -38,6 +38,16 @@ class Api::SpecsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "application/x-gzip", response.content_type
   end
 
+  test "index creates default app on first api access" do
+    create_specs_file("specs.4.8.gz")
+
+    assert_difference "ManagedApp.count", 1 do
+      get "/specs.4.8.gz"
+    end
+
+    assert_equal "default", ManagedApp.last.slug
+  end
+
   test "index proxies from upstream when specs file missing" do
     get "/specs.4.8.gz"
 

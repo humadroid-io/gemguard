@@ -1,0 +1,58 @@
+<div class="flex justify-between items-start mb-6">
+  <div>
+    <h1 class="text-3xl font-bold">Apps</h1>
+    <p class="text-base-content/70">Track gem usage, dependency trees, and per-app overrides.</p>
+  </div>
+  <%= link_to "New App", new_admin_app_path, class: "btn btn-primary" %>
+</div>
+
+<div class="card bg-base-100 shadow">
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Slug</th>
+          <th>Resolved Gems</th>
+          <th>Direct Dependencies</th>
+          <th>Overrides</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @apps.each do |app| %>
+          <tr class="hover">
+            <td>
+              <div class="font-bold"><%= link_to app.name, admin_app_path(app), class: "link link-hover" %></div>
+              <% if app.description.present? %>
+                <div class="text-sm text-base-content/70"><%= app.description %></div>
+              <% end %>
+            </td>
+            <td class="font-mono text-sm"><%= app.slug %></td>
+            <td><%= number_with_delimiter(app.app_gem_versions.size) %></td>
+            <td><%= number_with_delimiter(app.app_gem_versions.count(&:direct)) %></td>
+            <td class="text-sm text-base-content/70">
+              <% overrides = [] %>
+              <% overrides << "quarantine" if app.quarantine_hours.present? %>
+              <% overrides << "cache" unless app.cache_gems.nil? %>
+              <% overrides << "upstream" if app.upstream_source.present? %>
+              <%= overrides.any? ? overrides.join(", ") : "none" %>
+            </td>
+            <td class="text-right">
+              <div class="flex justify-end gap-2">
+                <%= link_to "View", admin_app_path(app), class: "btn btn-ghost btn-sm" %>
+                <%= link_to "Edit", edit_admin_app_path(app), class: "btn btn-ghost btn-sm" %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @apps.empty? %>
+    <div class="p-8 text-center text-base-content/70">
+      <p>No apps configured yet.</p>
+    </div>
+  <% end %>
+</div>

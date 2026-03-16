@@ -10,7 +10,32 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_26_234033) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_120200) do
+  create_table "app_dependency_edges", force: :cascade do |t|
+    t.integer "child_gem_version_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "managed_app_id", null: false
+    t.integer "parent_gem_version_id"
+    t.string "requirement"
+    t.datetime "updated_at", null: false
+    t.index ["child_gem_version_id"], name: "index_app_dependency_edges_on_child_gem_version_id"
+    t.index ["managed_app_id", "parent_gem_version_id", "child_gem_version_id", "requirement"], name: "index_app_dependency_edges_uniqueness", unique: true
+    t.index ["managed_app_id"], name: "index_app_dependency_edges_on_managed_app_id"
+    t.index ["parent_gem_version_id"], name: "index_app_dependency_edges_on_parent_gem_version_id"
+  end
+
+  create_table "app_gem_versions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.boolean "direct", default: false, null: false
+    t.integer "gem_version_id", null: false
+    t.integer "managed_app_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["gem_version_id"], name: "index_app_gem_versions_on_gem_version_id"
+    t.index ["managed_app_id", "direct"], name: "index_app_gem_versions_on_managed_app_id_and_direct"
+    t.index ["managed_app_id", "gem_version_id"], name: "index_app_gem_versions_on_managed_app_id_and_gem_version_id", unique: true
+    t.index ["managed_app_id"], name: "index_app_gem_versions_on_managed_app_id"
+  end
+
   create_table "audit_logs", force: :cascade do |t|
     t.string "action", null: false
     t.string "bundle_version"
@@ -56,6 +81,19 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_26_234033) do
     t.index ["status"], name: "index_gem_versions_on_status"
   end
 
+  create_table "managed_apps", force: :cascade do |t|
+    t.boolean "cache_gems"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "name", null: false
+    t.integer "quarantine_hours"
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.string "upstream_source"
+    t.index ["name"], name: "index_managed_apps_on_name", unique: true
+    t.index ["slug"], name: "index_managed_apps_on_slug", unique: true
+  end
+
   create_table "quarantine_rules", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -89,6 +127,11 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_26_234033) do
     t.index ["key"], name: "index_settings_on_key", unique: true
   end
 
+  add_foreign_key "app_dependency_edges", "gem_versions", column: "child_gem_version_id"
+  add_foreign_key "app_dependency_edges", "gem_versions", column: "parent_gem_version_id"
+  add_foreign_key "app_dependency_edges", "managed_apps"
+  add_foreign_key "app_gem_versions", "gem_versions"
+  add_foreign_key "app_gem_versions", "managed_apps"
   add_foreign_key "gem_versions", "gem_packages"
   add_foreign_key "quarantine_rules", "gem_packages"
 end

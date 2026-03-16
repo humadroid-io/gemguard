@@ -1,0 +1,16 @@
+<li class="mb-2">
+  <div class="flex items-center gap-2">
+    <span class="font-mono text-sm"><%= node[:gem_version].gem_name %></span>
+    <span class="badge badge-ghost badge-sm"><%= node[:gem_version].version %></span>
+    <% if local_assigns[:requirement].present? %>
+      <span class="text-xs text-base-content/60"><%= requirement %></span>
+    <% end %>
+  </div>
+  <% if node[:children].any? %>
+    <ul class="ml-6 mt-2 border-l border-base-300 pl-4">
+      <% node[:children].each do |child| %>
+        <%= render "dependency_node", node: child, requirement: child[:requirement] %>
+      <% end %>
+    </ul>
+  <% end %>
+</li>

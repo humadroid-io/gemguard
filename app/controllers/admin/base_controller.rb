@@ -6,6 +6,7 @@ module Admin
     private
 
     def check_bootstrap_status
+      ManagedApp.ensure_default!
       return if Setting.baseline_imported?
 
       # Queue baseline import if not already running

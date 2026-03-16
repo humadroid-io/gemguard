@@ -1,0 +1,67 @@
+<%= form_with model: [:admin, app], class: "space-y-6" do |f| %>
+  <% if app.errors.any? %>
+    <div class="alert alert-error">
+      <span><%= app.errors.full_messages.to_sentence %></span>
+    </div>
+  <% end %>
+
+  <div class="form-control">
+    <label class="label">
+      <span class="label-text font-bold">Name</span>
+    </label>
+    <%= f.text_field :name, class: "input input-bordered w-full max-w-md" %>
+  </div>
+
+  <div class="form-control">
+    <label class="label">
+      <span class="label-text font-bold">Slug</span>
+    </label>
+    <%= f.text_field :slug, class: "input input-bordered w-full max-w-md", placeholder: "my-app" %>
+    <label class="label">
+      <span class="label-text-alt text-base-content/70">Used as the stable identifier for this app.</span>
+    </label>
+  </div>
+
+  <div class="form-control">
+    <label class="label">
+      <span class="label-text font-bold">Description</span>
+    </label>
+    <%= f.text_area :description, rows: 3, class: "textarea textarea-bordered w-full max-w-2xl" %>
+  </div>
+
+  <div class="divider">Overrides</div>
+
+  <div class="form-control">
+    <label class="label">
+      <span class="label-text font-bold">Quarantine Hours</span>
+    </label>
+    <%= f.number_field :quarantine_hours, class: "input input-bordered w-full max-w-xs", min: 0, max: 720, placeholder: "Inherit global setting" %>
+  </div>
+
+  <div class="form-control">
+    <label class="label">
+      <span class="label-text font-bold">Cache Gems</span>
+    </label>
+    <select name="managed_app[cache_gems_override]" class="select select-bordered w-full max-w-xs">
+      <option value="" <%= "selected" if app.cache_gems.nil? %>>Inherit global setting</option>
+      <option value="true" <%= "selected" if app.cache_gems == true %>>Enabled</option>
+      <option value="false" <%= "selected" if app.cache_gems == false %>>Disabled</option>
+    </select>
+  </div>
+
+  <div class="form-control">
+    <label class="label">
+      <span class="label-text font-bold">Upstream Source</span>
+    </label>
+    <%= f.url_field :upstream_source, class: "input input-bordered w-full max-w-md", placeholder: "Inherit global upstream source" %>
+  </div>
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn btn-primary"><%= app.persisted? ? "Save App" : "Create App" %></button>
+    <% if app.persisted? %>
+      <%= link_to "Cancel", admin_app_path(app), class: "btn btn-ghost" %>
+    <% else %>
+      <%= link_to "Cancel", admin_apps_path, class: "btn btn-ghost" %>
+    <% end %>
+  </div>
+<% end %>

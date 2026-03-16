@@ -1,0 +1,89 @@
+<div class="flex justify-between items-start mb-6">
+  <div>
+    <h1 class="text-3xl font-bold"><%= @app.name %></h1>
+    <p class="text-base-content/70 font-mono"><%= @app.slug %></p>
+    <% if @app.description.present? %>
+      <p class="mt-2 text-base-content/70 max-w-3xl"><%= @app.description %></p>
+    <% end %>
+  </div>
+  <div class="flex gap-2">
+    <%= link_to "Edit", edit_admin_app_path(@app), class: "btn btn-ghost" %>
+    <%= button_to "Delete", admin_app_path(@app), method: :delete, class: "btn btn-error", data: {confirm: "Delete #{@app.name}?"} %>
+  </div>
+</div>
+
+<div class="stats shadow mb-6">
+  <div class="stat">
+    <div class="stat-title">Resolved Gems</div>
+    <div class="stat-value text-primary"><%= number_with_delimiter(@app_gem_versions.count) %></div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Direct Dependencies</div>
+    <div class="stat-value text-info"><%= number_with_delimiter(@direct_gem_versions.count) %></div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Effective Quarantine</div>
+    <div class="stat-value text-warning"><%= @app.effective_quarantine_hours %>h</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+  <div class="xl:col-span-1 space-y-6">
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Import Gemfile.lock</h2>
+        <p class="text-sm text-base-content/70">Refresh this app’s resolved gems and dependency tree.</p>
+        <%= form_with url: import_lockfile_admin_app_path(@app), method: :post, multipart: true, class: "space-y-4 mt-4" do %>
+          <input type="file" name="lockfile" accept=".lock" class="file-input file-input-bordered w-full" />
+          <button type="submit" class="btn btn-primary">Import Lockfile</button>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Effective Settings</h2>
+        <div class="space-y-2 text-sm">
+          <div><span class="font-bold">Quarantine:</span> <%= @app.effective_quarantine_hours %> hours</div>
+          <div><span class="font-bold">Cache Gems:</span> <%= @app.effective_cache_gems ? "enabled" : "disabled" %></div>
+          <div><span class="font-bold">Upstream:</span> <span class="font-mono"><%= @app.effective_upstream_source %></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Direct Dependencies</h2>
+        <% if @direct_gem_versions.any? %>
+          <ul class="space-y-2">
+            <% @direct_gem_versions.each do |gem_version| %>
+              <li class="flex items-center justify-between">
+                <span class="font-mono text-sm"><%= gem_version.gem_name %></span>
+                <span class="badge badge-ghost"><%= gem_version.version %></span>
+              </li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="text-sm text-base-content/70">No lockfile imported yet.</p>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <div class="xl:col-span-2">
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">Dependency Tree</h2>
+        <% if @dependency_tree.any? %>
+          <ul class="mt-4">
+            <% @dependency_tree.each do |node| %>
+              <%= render "dependency_node", node: node %>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="text-sm text-base-content/70 mt-2">Import a Gemfile.lock to build the dependency tree.</p>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>

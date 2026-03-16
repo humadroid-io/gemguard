@@ -6,6 +6,7 @@ module Api
     private
 
     def ensure_bootstrapped
+      ManagedApp.ensure_default!
       return if Setting.baseline_imported?
 
       # Queue baseline import (only once - job deduplication prevents multiple runs)

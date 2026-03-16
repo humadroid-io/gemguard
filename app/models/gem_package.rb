@@ -1,6 +1,7 @@
 class GemPackage < ApplicationRecord
   has_many :versions, class_name: "GemVersion", dependent: :destroy
   has_many :quarantine_rules, dependent: :destroy
+  has_many :managed_apps, through: :versions
 
   validates :name, presence: true, uniqueness: true
 
