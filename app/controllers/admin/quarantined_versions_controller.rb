@@ -59,8 +59,10 @@ module Admin
       gem_version.first_seen_at ||= @quarantined_version.first_seen_at
       gem_version.save!
 
-      # Keep in quarantine - specs regeneration needed for blocked status
+      # Keep the quarantine row so the resolver still excludes this version,
+      # then regenerate both legacy specs and compact index metadata.
       regenerate_specs
+      invalidate_compact_index_info(@quarantined_version.name)
       redirect_to admin_quarantined_versions_path, notice: "#{@quarantined_version.name} #{@quarantined_version.version} blocked"
     end
 
@@ -106,6 +108,19 @@ module Admin
       %i[all latest prerelease].each do |type|
         RegenerateFilteredSpecsJob.perform_later(type: type)
       end
+
+      # Compact index clients resolve from /versions rather than Marshal specs.
+      SyncCompactIndexJob.perform_later(type: :versions)
+    end
+
+    def invalidate_compact_index_info(gem_name)
+      info_path = Rails.root.join("storage", "compact_index", "info", gem_name)
+      etag_path = "#{info_path}.etag"
+
+      FileUtils.rm_f(info_path)
+      FileUtils.rm_f(etag_path)
+
+      Rails.logger.info("QuarantinedVersionsController: Invalidated compact index info for #{gem_name}")
     end
   end
 end

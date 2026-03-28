@@ -9,6 +9,13 @@ class ApproveExpiredQuarantineJob < ApplicationJob
       next if gem_version.actively_quarantined?
 
       gem_version.update!(status: :approved)
+      # Auto-approval also has to clear the active quarantine row so filtered
+      # specs and compact index metadata expose the version again right away.
+      QuarantinedVersion.where(
+        name: gem_version.gem_name,
+        version: gem_version.version,
+        platform: gem_version.platform
+      ).destroy_all
       expired_count += 1
     end
 

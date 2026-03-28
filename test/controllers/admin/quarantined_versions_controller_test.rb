@@ -2,6 +2,7 @@ require "test_helper"
 
 class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
   include SpecsTestHelper
+  include ActiveJob::TestHelper
 
   setup do
     setup_test_specs_directory
@@ -123,6 +124,12 @@ class Admin::QuarantinedVersionsControllerTest < ActionDispatch::IntegrationTest
 
   test "block enqueues spec regeneration" do
     assert_enqueued_jobs 3, only: RegenerateFilteredSpecsJob do
+      post block_admin_quarantined_version_path(@quarantined)
+    end
+  end
+
+  test "block enqueues compact index regeneration" do
+    assert_enqueued_with(job: SyncCompactIndexJob, args: [{type: :versions}]) do
       post block_admin_quarantined_version_path(@quarantined)
     end
   end

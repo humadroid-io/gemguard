@@ -5,7 +5,8 @@ class QuarantinedVersion < ApplicationRecord
   validates :first_seen_at, presence: true
   validates :version, uniqueness: {scope: [:name, :platform]}
 
-  # Regenerate filtered specs when quarantine changes
+  # Resolver-visible metadata is derived from this table, so create/destroy
+  # must trigger regeneration even when upstream data has not changed.
   after_commit :schedule_specs_regeneration, on: [:create, :destroy]
   after_commit :invalidate_compact_index_info, on: [:create, :destroy]
 
@@ -30,12 +31,13 @@ class QuarantinedVersion < ApplicationRecord
     RegenerateFilteredSpecsJob.perform_later(type: :latest)
     RegenerateFilteredSpecsJob.perform_later(type: :prerelease)
 
-    # Compact Index
+    # Compact index /versions is another resolver entry point for bundler.
     SyncCompactIndexJob.perform_later(type: :versions)
   end
 
   # Delete cached info file so it gets refreshed with updated filtering
-  # This ensures approved versions appear immediately in bundler
+  # This ensures approved or blocked versions appear/disappear immediately when
+  # bundler asks for /info/:name after a quarantine change.
   def invalidate_compact_index_info
     info_path = Rails.root.join("storage", "compact_index", "info", name)
     etag_path = "#{info_path}.etag"

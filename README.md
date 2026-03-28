@@ -188,7 +188,7 @@ source "http://gemguard.internal:9292"
 
 ## How It Works
 
-GemGuard uses a **filtered specs** approach for transparent quarantine:
+GemGuard uses a **filtered index** approach for transparent quarantine:
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -200,18 +200,21 @@ GemGuard uses a **filtered specs** approach for transparent quarantine:
 1. **Baseline Import**: Downloads specs files from RubyGems.org (names/versions only, no database records)
 2. **Specs Sync**: Background jobs periodically sync specs and detect NEW versions via diff
 3. **Quarantine Tracking**: New versions are inserted into lightweight `quarantined_versions` table
-4. **Filtered Specs**: GemGuard serves filtered specs excluding quarantined versions - Bundler only sees available gems
+4. **Filtered Resolver Metadata**: GemGuard serves filtered legacy specs and Compact Index data, excluding actively quarantined and explicitly blocked versions
 5. **On-Demand Tracking**: When a gem is actually requested, GemGuard creates database records for audit/caching
-6. **Smart Approval**: Gems past the quarantine period are auto-approved
+6. **Smart Approval**: Gems past the quarantine period are auto-approved and removed from the active quarantine set
 
-### Why Filtering at Specs Level?
+### Why Filtering at Index Level?
 
-Bundler fetches the specs index (`specs.4.8.gz`) first to know what versions exist, then resolves dependencies locally. If a version isn't in the specs, Bundler doesn't know it exists.
+Bundler resolves from index metadata first. Depending on client/version, that means the legacy specs files (`specs.4.8.gz`, `latest_specs.4.8.gz`, `prerelease_specs.4.8.gz`) and/or the Compact Index (`/versions` and `/info/:name`).
+
+If a version is removed from those resolver-visible files, Bundler does not know it exists and will not resolve it.
 
 This means:
-- Bundler never sees quarantined gems (no confusing errors)
+- Bundler never sees actively quarantined or blocked versions during resolution
 - Your database only contains gems your team actually uses
 - Quarantine is based on actual RubyGems publish date
+- Adding or removing quarantine regenerates filtered specs and compact index data so the resolver view stays in sync
 
 ### Database Design
 
@@ -235,9 +238,9 @@ storage/
 │   ├── latest_specs.4.8.gz
 │   └── prerelease_specs.4.8.gz
 ├── compact_index/        # Compact Index files
-│   ├── versions          # All gem versions
-│   ├── names             # All gem names
-│   └── info/             # Per-gem dependency info
+│   ├── versions          # Filtered resolver-visible versions
+│   ├── names             # Gem names only (unfiltered; names do not expose versions)
+│   └── info/             # Filtered per-gem dependency info
 │       ├── rails
 │       ├── nokogiri
 │       └── ...

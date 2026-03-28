@@ -8,6 +8,9 @@ class GemVersion < ApplicationRecord
   validates :first_seen_at, presence: true
   validates :version, uniqueness: {scope: [:gem_package_id, :platform]}
 
+  # A quarantined status alone is not enough for resolver filtering. We also
+  # persist a QuarantinedVersion row because that table is what filtered specs
+  # and compact index generation consult.
   after_commit :ensure_quarantined_version_exists, on: [:create, :update], if: :quarantined?
 
   scope :cached, -> { where.not(cached_at: nil) }
@@ -39,11 +42,12 @@ class GemVersion < ApplicationRecord
   end
 
   def actively_quarantined?
-    # Check QuarantinedVersion table first - this is the source of truth
-    # for what's actually quarantined (includes manual quarantines)
+    # Check QuarantinedVersion first because manual quarantine/block actions may
+    # intentionally diverge from the GemVersion status enum.
     return true if QuarantinedVersion.quarantined?(gem_name, version, platform)
 
-    # Also check if this GemVersion has quarantined status and is within quarantine period
+    # Fall back to the GemVersion status for recently discovered versions that
+    # have not been explicitly removed from quarantine yet.
     return false unless quarantined?
     return false if published_at.nil?
 

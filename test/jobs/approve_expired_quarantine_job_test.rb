@@ -13,6 +13,7 @@ class ApproveExpiredQuarantineJobTest < ActiveJob::TestCase
     ApproveExpiredQuarantineJob.perform_now
 
     assert expired_gem.reload.approved?
+    assert_not QuarantinedVersion.exists?(name: package.name, version: expired_gem.version, platform: expired_gem.platform)
   end
 
   test "does not approve gems still in quarantine period" do

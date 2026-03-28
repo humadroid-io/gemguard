@@ -102,6 +102,32 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
     assert_not_includes content, "7.1.0"
   end
 
+  test "sync_versions filters blocked versions" do
+    gem_package = create(:gem_package, name: "rails")
+    create(:gem_version, :blocked, gem_package: gem_package, version: "7.1.0", platform: "ruby")
+    stub_versions_request
+    stub_info_request("rails")
+
+    @service.sync_versions
+
+    content = File.read(@storage_path.join("versions"))
+    assert_includes content, "rails 7.0.0,7.2.0"
+    assert_not_includes content, "7.1.0"
+  end
+
+  test "sync_info filters blocked versions" do
+    gem_package = create(:gem_package, name: "rails")
+    create(:gem_version, :blocked, gem_package: gem_package, version: "7.1.0", platform: "ruby")
+    stub_info_request("rails")
+
+    @service.sync_info("rails")
+
+    content = File.read(@storage_path.join("info", "rails"))
+    assert_includes content, "7.0.0"
+    assert_includes content, "7.2.0"
+    assert_not_includes content, "7.1.0"
+  end
+
   test "sync_info returns false for non-existent gem" do
     stub_request(:get, "https://rubygems.org/info/nonexistent")
       .to_return(status: 404)

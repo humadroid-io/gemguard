@@ -132,8 +132,8 @@ class CompactIndexService
   end
 
   def filter_versions(content)
-    quarantined = load_quarantined_versions
-    return content if quarantined.empty?
+    excluded = load_excluded_versions
+    return content if excluded.empty?
 
     lines = content.lines
     header_end = lines.index { |l| l.strip == "---" }
@@ -147,13 +147,13 @@ class CompactIndexService
     end
 
     filtered_body = body.map do |line|
-      filter_versions_line(line, quarantined)
+      filter_versions_line(line, excluded)
     end.compact
 
     (header + filtered_body).join
   end
 
-  def filter_versions_line(line, quarantined)
+  def filter_versions_line(line, excluded)
     return line if line.strip.empty? || line.start_with?("#")
 
     parts = line.split(" ")
@@ -164,12 +164,12 @@ class CompactIndexService
     checksum = parts[2]
 
     # Check if any versions of this gem are quarantined
-    gem_quarantined = quarantined[gem_name]
-    return line unless gem_quarantined&.any?
+    gem_excluded = excluded[gem_name]
+    return line unless gem_excluded&.any?
 
     # Filter out quarantined versions
     versions = versions_str.split(",")
-    filtered_versions = versions.reject { |version_token| quarantined_version_token?(gem_quarantined, version_token) }
+    filtered_versions = versions.reject { |version_token| excluded_version_token?(gem_excluded, version_token) }
 
     return nil if filtered_versions.empty?
 
@@ -180,8 +180,8 @@ class CompactIndexService
   end
 
   def filter_info(gem_name, content)
-    quarantined = load_quarantined_versions[gem_name]
-    return content unless quarantined&.any?
+    excluded = load_excluded_versions[gem_name]
+    return content unless excluded&.any?
 
     lines = content.lines
     header_end = lines.index { |l| l.strip == "---" }
@@ -201,14 +201,14 @@ class CompactIndexService
       version_part = line.split(" ").first
       next false unless version_part
 
-      quarantined_version_token?(quarantined, version_part)
+      excluded_version_token?(excluded, version_part)
     end
 
     (header + filtered_body).join
   end
 
-  def quarantined_version_token?(quarantined_versions, version_token)
-    quarantined_versions.any? do |version, platform|
+  def excluded_version_token?(excluded_versions, version_token)
+    excluded_versions.any? do |version, platform|
       version_token == version || version_token == "#{version}-#{platform}"
     end
   end
@@ -248,12 +248,16 @@ class CompactIndexService
     end
   end
 
-  def load_quarantined_versions
-    @quarantined_versions ||= begin
+  def load_excluded_versions
+    @excluded_versions ||= begin
       result = Hash.new { |h, k| h[k] = Set.new }
 
       QuarantinedVersion.active.find_each do |qv|
         result[qv.name] << [qv.version, qv.platform]
+      end
+
+      GemVersion.blocked.joins(:gem_package).find_each do |gem_version|
+        result[gem_version.gem_package.name] << [gem_version.version, gem_version.platform]
       end
 
       result

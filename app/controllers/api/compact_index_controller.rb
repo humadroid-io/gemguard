@@ -1,7 +1,9 @@
 module Api
   class CompactIndexController < BaseController
     # GET /versions
-    # Returns the versions file with quarantined gems filtered out
+    # Returns the resolver-visible compact index version list.
+    # This file is filtered so bundler never sees actively quarantined
+    # or blocked versions during dependency resolution.
     def versions
       path = compact_index_path.join("versions")
       stale = ensure_versions_file(path)
@@ -13,7 +15,8 @@ module Api
     end
 
     # GET /info/:name
-    # Returns dependency info for a specific gem with quarantined versions filtered
+    # Returns per-gem compact index info filtered with the same exclusion rules
+    # as /versions so the checksum and dependency payload stay consistent.
     def info
       gem_name = params[:name]
       return head :bad_request if gem_name.blank?
@@ -26,7 +29,10 @@ module Api
     end
 
     # GET /names
-    # Returns list of all gem names (optional, some clients use this)
+    # Returns gem names only.
+    # Names are intentionally unfiltered because the resolver decides from
+    # /versions and /info/:name; hiding a name is only necessary when every
+    # version line disappears from /versions.
     def names
       path = compact_index_path.join("names")
       stale = false
@@ -71,7 +77,8 @@ module Api
       # File is fresh - no sync needed
       return false if File.exist?(path) && !file_stale?(path)
 
-      # Queue async refresh
+      # Quarantine changes can happen outside of upstream sync cadence, so we
+      # always re-run filtering when the cached file is stale.
       SyncCompactIndexJob.perform_later(type: :versions)
 
       if File.exist?(path)

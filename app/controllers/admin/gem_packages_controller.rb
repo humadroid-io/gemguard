@@ -44,8 +44,8 @@ module Admin
       @version = @gem_package.versions.find(params[:version_id])
       @version.update!(status: :approved)
 
-      # Remove from quarantine so it appears in specs
-      # QuarantinedVersion callback handles specs regeneration
+      # The quarantine table is the source of truth for what the resolver must
+      # hide right now. Approval has to remove that row, not just flip status.
       QuarantinedVersion.where(
         name: @gem_package.name,
         version: @version.version,
@@ -64,7 +64,8 @@ module Admin
       @version = @gem_package.versions.find(params[:version_id])
       @version.update!(status: :blocked)
 
-      # Ensure it's in quarantine so it's excluded from specs
+      # Blocking also inserts/retains a quarantine row so both legacy specs and
+      # compact index hide the version immediately.
       qv = QuarantinedVersion.find_or_initialize_by(
         name: @gem_package.name,
         version: @version.version,
