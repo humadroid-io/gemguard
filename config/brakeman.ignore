@@ -22,7 +22,53 @@
         502
       ],
       "note": ""
+    },
+    {
+      "warning_type": "Remote Code Execution",
+      "warning_code": 25,
+      "fingerprint": "a15015d25e473b003e50e38ea10f4ef98f68f9dcea8cd12487fab688adbdde60",
+      "check_name": "Deserialize",
+      "message": "Use of `Marshal.load` may be dangerous",
+      "file": "app/services/rubygems_client.rb",
+      "line": 88,
+      "link": "https://brakemanscanner.org/docs/warning_types/unsafe_deserialization",
+      "code": "Marshal.load(Zlib::GzipReader.new(StringIO.new(gzipped_data)).read)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "RubygemsClient",
+        "method": "self.parse_specs"
+      },
+      "user_input": null,
+      "confidence": "Weak",
+      "cwe_id": [
+        502
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "Remote Code Execution",
+      "warning_code": 25,
+      "fingerprint": "b5a425b5625cb2c040133a52a253dcc8d635c3f49acbaa129dfc1375f6f2e9dc",
+      "check_name": "Deserialize",
+      "message": "Use of `Marshal.load` may be dangerous",
+      "file": "app/services/rubygems_client.rb",
+      "line": 100,
+      "link": "https://brakemanscanner.org/docs/warning_types/unsafe_deserialization",
+      "code": "Marshal.load(payload)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "RubygemsClient",
+        "method": "self.parse_dependencies"
+      },
+      "user_input": null,
+      "confidence": "Weak",
+      "cwe_id": [
+        502
+      ],
+      "note": ""
     }
   ],
-  "brakeman_version": "7.1.2"
+  "brakeman_version": "8.0.4"
 }
