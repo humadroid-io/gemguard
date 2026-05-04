@@ -73,3 +73,5 @@ gem "httparty", "~> 0.23.2"
 gem "pagy", "~> 43.2"
 
 gem "factory_bot_rails", "~> 6.5", groups: [:development, :test]
+
+gem "standardrb", "~> 1.0"

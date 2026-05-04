@@ -133,7 +133,7 @@ class GemRefreshService
       QuarantinedVersion.find_or_create_by!(
         name: gem_package.name,
         version: gem_version.version,
-        platform: gem_version.platform,
+        platform: gem_version.platform
       ) do |qv|
         qv.first_seen_at = gem_version.first_seen_at || Time.current
       end

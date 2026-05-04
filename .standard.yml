@@ -2,7 +2,7 @@
 # Used for formatting (style/layout) - handles all Style/* cops
 # https://github.com/standardrb/standard
 
-ruby_version: 3.4
+ruby_version: 4.0
 
 ignore:
   - "db/schema.rb"

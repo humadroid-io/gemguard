@@ -214,10 +214,10 @@ class CompactIndexService
 
   def excluded_version_token?(excluded_versions, version_token)
     excluded_versions.any? do |version, platform|
-      if platform == "ruby"
-        version_token == version
+      version_token == if platform == "ruby"
+        version
       else
-        version_token == "#{version}-#{platform}"
+        "#{version}-#{platform}"
       end
     end
   end
@@ -252,8 +252,6 @@ class CompactIndexService
       response
     when :not_modified
       File.exist?(raw_path) ? File.read(raw_path) : nil
-    else
-      nil
     end
   end
 
