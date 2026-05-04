@@ -4,7 +4,7 @@ class ImportSpecsBaselineJob < ApplicationJob
   queue_as :default
 
   # Prevent multiple concurrent imports
-  limits_concurrency to: 1, key: -> { "baseline_import" }
+  limits_concurrency to: 1, key: ->(*) { "baseline_import" }
 
   def perform(include_prerelease: false)
     # Skip if already imported (handles race conditions)
