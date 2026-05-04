@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-theme="light">
+<html>
   <head>
     <title><%= content_for(:title) || "GemGuard Admin" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,6 +7,17 @@
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
+    <script>
+      (() => {
+        try {
+          const theme = localStorage.getItem("gemguard.theme")
+
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.dataset.theme = theme
+          }
+        } catch (_) {}
+      })()
+    </script>
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
     <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
   </head>
@@ -30,7 +41,33 @@
           <% end %>
         <% end %>
       </div>
-      <div class="flex-none">
+      <div class="flex-none flex items-center gap-2">
+        <div class="dropdown dropdown-end" data-controller="theme" data-theme-storage-key-value="gemguard.theme">
+          <div tabindex="0" role="button" class="btn btn-ghost gap-2">
+            <span class="hidden sm:inline">Theme</span>
+            <span data-theme-target="label">Auto</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 mt-3 w-40 p-2 shadow">
+            <li>
+              <button type="button" role="menuitemradio" data-action="theme#select" data-theme-target="option" data-theme-value-param="auto">
+                Auto
+              </button>
+            </li>
+            <li>
+              <button type="button" role="menuitemradio" data-action="theme#select" data-theme-target="option" data-theme-value-param="light">
+                Light
+              </button>
+            </li>
+            <li>
+              <button type="button" role="menuitemradio" data-action="theme#select" data-theme-target="option" data-theme-value-param="dark">
+                Dark
+              </button>
+            </li>
+          </ul>
+        </div>
         <ul class="menu menu-horizontal px-1">
           <li><%= link_to "Dashboard", admin_root_path %></li>
           <li><%= link_to "Gems", admin_gem_packages_path %></li>
