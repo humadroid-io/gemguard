@@ -153,6 +153,14 @@ class Api::SpecsControllerTest < ActionDispatch::IntegrationTest
     assert_includes gem_names, "new-gem", "Unknown gems pass through (lazy tracking on download)"
   end
 
+  test "filter_specs fails closed when specs cannot be parsed" do
+    controller = Api::SpecsController.new
+    filtered_data = controller.send(:filter_specs, "invalid gzip")
+    specs = parse_gzipped_specs(filtered_data)
+
+    assert_empty specs
+  end
+
   test "sync job excludes blocked and quarantined gems" do
     # Create blocked gem
     blocked_package = create(:gem_package, name: "blocked-gem")

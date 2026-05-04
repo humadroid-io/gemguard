@@ -28,8 +28,10 @@ class LockfileImporter
         gem_version.status = :approved
         gem_version.first_seen_at = Time.current
         gem_version.save!
+        approve_existing_version(gem_version)
         imported += 1
       else
+        approve_existing_version(gem_version)
         existing += 1
       end
     rescue => e
@@ -43,6 +45,17 @@ class LockfileImporter
   end
 
   private
+
+  def approve_existing_version(gem_version)
+    return if gem_version.blocked?
+
+    gem_version.update!(status: :approved) unless gem_version.approved?
+    QuarantinedVersion.where(
+      name: gem_version.gem_name,
+      version: gem_version.version,
+      platform: gem_version.platform
+    ).destroy_all
+  end
 
   def parse_lockfile
     gems = []

@@ -1,4 +1,6 @@
 class CompactIndexService
+  LEGACY_SPEC_FILES = %w[specs.4.8.gz latest_specs.4.8.gz prerelease_specs.4.8.gz].freeze
+
   class << self
     def sync_versions
       new.sync_versions
@@ -33,6 +35,7 @@ class CompactIndexService
 
     if response.is_a?(String)
       # Got new content - save raw and filter
+      track_new_versions_from_compact_index(response, previous_versions_entries)
       write_file(raw_versions_path, response)
       filtered = filter_versions(response)
       write_file(versions_path, filtered)
@@ -64,6 +67,8 @@ class CompactIndexService
   end
 
   def sync_info(gem_name)
+    return false unless sync_versions
+
     upstream_url = "#{Setting.upstream_source}/info/#{gem_name}"
     info_file_path = info_path(gem_name)
     raw_info_file_path = raw_info_path(gem_name)
@@ -146,9 +151,9 @@ class CompactIndexService
       body = lines
     end
 
-    filtered_body = body.map do |line|
+    filtered_body = body.filter_map do |line|
       filter_versions_line(line, excluded)
-    end.compact
+    end
 
     (header + filtered_body).join
   end
@@ -161,7 +166,6 @@ class CompactIndexService
 
     gem_name = parts[0]
     versions_str = parts[1]
-    checksum = parts[2]
 
     # Check if any versions of this gem are quarantined
     gem_excluded = excluded[gem_name]
@@ -176,7 +180,8 @@ class CompactIndexService
     filtered_checksum = filtered_info_checksum(gem_name)
     return nil unless filtered_checksum
 
-    "#{gem_name} #{filtered_versions.join(",")} #{filtered_checksum}"
+    line_ending = line.end_with?("\n") ? "\n" : ""
+    "#{gem_name} #{filtered_versions.join(",")} #{filtered_checksum}#{line_ending}"
   end
 
   def filter_info(gem_name, content)
@@ -209,7 +214,11 @@ class CompactIndexService
 
   def excluded_version_token?(excluded_versions, version_token)
     excluded_versions.any? do |version, platform|
-      version_token == version || version_token == "#{version}-#{platform}"
+      if platform == "ruby"
+        version_token == version
+      else
+        version_token == "#{version}-#{platform}"
+      end
     end
   end
 
@@ -262,6 +271,121 @@ class CompactIndexService
 
       result
     end
+  end
+
+  def track_new_versions_from_compact_index(current_content, previous_entries)
+    return unless previous_entries&.any?
+    return if within_baseline_grace_period?
+
+    current_entries = parse_versions_entries(current_content)
+    new_entries = current_entries - previous_entries
+    return if new_entries.empty?
+
+    now = Time.current
+    records = new_entries.map do |name, version, platform|
+      {
+        name: name,
+        version: version,
+        platform: platform,
+        first_seen_at: now,
+        created_at: now,
+        updated_at: now
+      }
+    end
+
+    QuarantinedVersion.upsert_all(records, unique_by: [:name, :version, :platform])
+    ResolverMetadataInvalidator.invalidate!(gem_names: new_entries.map(&:first).uniq, compact: false)
+    enqueue_metadata_refresh_for_tracked_gems(new_entries)
+    @excluded_versions = nil
+
+    Rails.logger.info("CompactIndexService: Added #{records.size} compact index versions to quarantine")
+  end
+
+  def previous_versions_entries
+    return parse_versions_entries(File.read(raw_versions_path)) if File.exist?(raw_versions_path)
+
+    legacy_specs_entries
+  end
+
+  def legacy_specs_entries
+    entries = Set.new
+
+    LEGACY_SPEC_FILES.each do |filename|
+      path = Rails.root.join("storage", "specs", "raw", filename)
+      next unless File.exist?(path)
+
+      RubygemsClient.parse_specs(File.binread(path)).each do |name, version, platform|
+        entries << [name, version.to_s, normalize_platform(platform)]
+      end
+    end
+
+    entries
+  end
+
+  def parse_versions_entries(content)
+    entries = Set.new
+    body_lines(content).each do |line|
+      next if line.strip.empty? || line.start_with?("#")
+
+      parts = line.split(" ")
+      next if parts.size < 2
+
+      name = parts[0]
+      parts[1].split(",").each do |version_token|
+        version, platform = parse_version_token(version_token)
+        entries << [name, version, platform]
+      end
+    end
+
+    entries
+  end
+
+  def body_lines(content)
+    lines = content.lines
+    header_end = lines.index { |line| line.strip == "---" }
+    header_end ? lines[(header_end + 1)..] : lines
+  end
+
+  def parse_version_token(version_token)
+    token = version_token.to_s.strip
+
+    platform = known_platforms.find { |candidate| token.end_with?("-#{candidate}") }
+    return [token.delete_suffix("-#{platform}"), platform] if platform
+
+    [token, "ruby"]
+  end
+
+  def normalize_platform(platform)
+    platform.to_s.presence || "ruby"
+  end
+
+  def known_platforms
+    @known_platforms ||= %w[
+      x86_64-linux x86_64-linux-gnu x86_64-linux-musl
+      aarch64-linux aarch64-linux-gnu aarch64-linux-musl
+      arm-linux arm-linux-gnu arm-linux-musl
+      x86_64-darwin arm64-darwin
+      x64-mingw32 x64-mingw-ucrt
+      java jruby
+    ]
+  end
+
+  def enqueue_metadata_refresh_for_tracked_gems(entries)
+    gem_names = entries.map(&:first).uniq
+    tracked_names = GemPackage.tracked.where(name: gem_names).pluck(:name)
+    return if tracked_names.empty?
+
+    RefreshGemMetadataJob.perform_later(tracked_names)
+  end
+
+  def within_baseline_grace_period?
+    baseline_imported_at = Setting.get(:baseline_imported_at)
+    return false unless baseline_imported_at
+
+    imported_at = Time.parse(baseline_imported_at)
+    Time.current < imported_at + SyncSpecsJob::BASELINE_GRACE_PERIOD
+  rescue ArgumentError
+    false
   end
 
   def write_file(path, content)

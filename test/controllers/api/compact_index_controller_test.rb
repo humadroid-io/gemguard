@@ -87,6 +87,8 @@ class Api::CompactIndexControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "info syncs from upstream when file missing" do
+    stub_request(:get, "https://rubygems.org/versions")
+      .to_return(status: 200, body: @versions_content, headers: {"ETag" => "abc123"})
     stub_request(:get, "https://rubygems.org/info/rails")
       .to_return(status: 200, body: @info_content, headers: {"ETag" => "info123"})
 
@@ -97,6 +99,8 @@ class Api::CompactIndexControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "info returns not_found when sync fails" do
+    stub_request(:get, "https://rubygems.org/versions")
+      .to_return(status: 200, body: @versions_content, headers: {"ETag" => "abc123"})
     stub_request(:get, "https://rubygems.org/info/unknown").to_return(status: 404)
 
     get "/info/unknown"

@@ -123,6 +123,7 @@ class SyncSpecsJob < ApplicationJob
       unique_by: [:name, :version, :platform]
     )
 
+    ResolverMetadataInvalidator.invalidate!(gem_names: versions.map(&:first).uniq, legacy: false)
     Rails.logger.info("SyncSpecsJob: Added #{records.size} versions to quarantine")
   end
 
@@ -190,7 +191,7 @@ class SyncSpecsJob < ApplicationJob
     File.binwrite(temp_path, data)
     File.rename(temp_path, path)
   rescue => e
-    File.delete(temp_path) if File.exist?(temp_path)
+    FileUtils.rm_f(temp_path)
     raise e
   end
 

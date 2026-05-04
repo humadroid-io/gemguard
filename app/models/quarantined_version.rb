@@ -7,6 +7,7 @@ class QuarantinedVersion < ApplicationRecord
 
   # Resolver-visible metadata is derived from this table, so create/destroy
   # must trigger regeneration even when upstream data has not changed.
+  after_commit :invalidate_resolver_metadata, on: [:create, :destroy]
   after_commit :schedule_specs_regeneration, on: [:create, :destroy]
   after_commit :invalidate_compact_index_info, on: [:create, :destroy]
 
@@ -23,8 +24,13 @@ class QuarantinedVersion < ApplicationRecord
 
   private
 
-  # Schedule specs regeneration via job
-  # Jobs are deduplicated to avoid multiple concurrent regenerations
+  # Remove stale resolver metadata immediately; background jobs rebuild it.
+  def invalidate_resolver_metadata
+    ResolverMetadataInvalidator.invalidate!(gem_names: [name])
+  end
+
+  # Schedule specs regeneration via job.
+  # Jobs are deduplicated to avoid multiple concurrent regenerations.
   def schedule_specs_regeneration
     # Legacy Marshal specs
     RegenerateFilteredSpecsJob.perform_later(type: :all)

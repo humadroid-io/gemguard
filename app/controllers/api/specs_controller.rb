@@ -45,11 +45,8 @@ module Api
       # This ensures offline operation works with cached data
       if File.exist?(filtered_path)
         serve_file(filtered_path, filename, stale: !sync_success)
-      elsif sync_success
-        # Sync succeeded but no file - unexpected, try proxy
-        proxy_from_upstream(filename)
       else
-        # No local file and sync failed - try proxy as last resort
+        # No local file - try upstream as a last resort, but keep filtering closed.
         proxy_from_upstream(filename)
       end
     end
@@ -103,7 +100,7 @@ module Api
     def filter_specs(gzipped_data)
       # Parse the specs
       specs = RubygemsClient.parse_specs(gzipped_data)
-      return gzipped_data if specs.empty?
+      return build_empty_specs if specs.empty?
 
       # Build BLOCKED set - gems explicitly blocked
       blocked_set = GemVersion.blocked
@@ -138,8 +135,9 @@ module Api
       io.string
     rescue => e
       Rails.logger.error("SpecsController: Failed to filter specs: #{e.message}")
-      # On error, pass through unfiltered - prefer availability over blocking
-      gzipped_data
+      # Fail closed so blocked or quarantined versions are never exposed by an
+      # unfiltered upstream fallback.
+      build_empty_specs
     end
 
     def build_empty_specs

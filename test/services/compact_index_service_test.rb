@@ -2,11 +2,17 @@ require "test_helper"
 require "webmock/minitest"
 
 class CompactIndexServiceTest < ActiveSupport::TestCase
+  include SpecsTestHelper
+
+  parallelize(workers: 1)
+
   setup do
     WebMock.disable_net_connect!(allow_localhost: true)
     @service = CompactIndexService.new
     @storage_path = CompactIndexService.storage_path
+    @legacy_specs_path = Rails.root.join("storage", "specs", "raw")
     FileUtils.rm_rf(@storage_path)
+    FileUtils.rm_rf(@legacy_specs_path)
 
     @versions_content = <<~VERSIONS
       created_at: 2024-01-01T00:00:00Z
@@ -26,6 +32,7 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
 
   teardown do
     FileUtils.rm_rf(@storage_path)
+    FileUtils.rm_rf(@legacy_specs_path)
     WebMock.allow_net_connect!
   end
 
@@ -46,6 +53,79 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
     content = File.read(@storage_path.join("versions"))
     assert_includes content, "rails 7.0.0,7.2.0"
     assert_not_includes content, "7.1.0"
+  end
+
+  test "sync_versions preserves line endings when filtering versions" do
+    create(:quarantined_version, name: "rails", version: "7.1.0", platform: "ruby")
+    stub_versions_request
+    stub_info_request("rails")
+
+    @service.sync_versions
+
+    content = File.read(@storage_path.join("versions"))
+    assert_match(/^rails 7\.0\.0,7\.2\.0 [a-f0-9]+\nnokogiri /, content)
+  end
+
+  test "sync_versions quarantines newly appearing compact index versions before filtering" do
+    FileUtils.mkdir_p(CompactIndexService.raw_storage_path)
+    File.write(CompactIndexService.raw_storage_path.join("versions"), @versions_content.sub(",7.2.0", ""))
+    stub_versions_request
+    stub_info_request("rails")
+
+    @service.sync_versions
+
+    assert QuarantinedVersion.exists?(name: "rails", version: "7.2.0", platform: "ruby")
+
+    content = File.read(@storage_path.join("versions"))
+    assert_includes content, "rails 7.0.0,7.1.0"
+    assert_not_includes content, "7.2.0"
+  end
+
+  test "sync_versions compares against legacy specs baseline when compact raw versions are missing" do
+    FileUtils.mkdir_p(@legacy_specs_path)
+    File.binwrite(@legacy_specs_path.join("specs.4.8.gz"), gzipped_specs([
+      ["rails", Gem::Version.new("7.0.0"), "ruby"],
+      ["rails", Gem::Version.new("7.1.0"), "ruby"]
+    ]))
+    stub_versions_request
+    stub_info_request("rails")
+
+    @service.sync_versions
+
+    assert QuarantinedVersion.exists?(name: "rails", version: "7.2.0", platform: "ruby")
+
+    content = File.read(@storage_path.join("versions"))
+    assert_includes content, "rails 7.0.0,7.1.0"
+    assert_not_includes content, "7.2.0"
+  end
+
+  test "sync_versions quarantines newly appearing platform versions before filtering" do
+    FileUtils.mkdir_p(CompactIndexService.raw_storage_path)
+    File.write(CompactIndexService.raw_storage_path.join("versions"), <<~VERSIONS)
+      created_at: 2024-01-01T00:00:00Z
+      ---
+      nokogiri 1.16.0 def456
+    VERSIONS
+    @versions_content = <<~VERSIONS
+      created_at: 2024-01-01T00:00:00Z
+      ---
+      nokogiri 1.16.0,1.16.0-x86_64-linux def456
+    VERSIONS
+    @info_content = <<~INFO
+      ---
+      1.16.0 |checksum:abc
+      1.16.0-x86_64-linux |checksum:def
+    INFO
+    stub_versions_request
+    stub_info_request("nokogiri")
+
+    @service.sync_versions
+
+    assert QuarantinedVersion.exists?(name: "nokogiri", version: "1.16.0", platform: "x86_64-linux")
+
+    content = File.read(@storage_path.join("versions"))
+    assert_includes content, "nokogiri 1.16.0"
+    assert_not_includes content, "1.16.0-x86_64-linux"
   end
 
   test "sync_versions updates checksum to match filtered info content" do
@@ -84,6 +164,7 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
   end
 
   test "sync_info downloads and stores info file" do
+    stub_versions_request
     stub_info_request("rails")
 
     assert @service.sync_info("rails")
@@ -92,6 +173,7 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
 
   test "sync_info filters quarantined versions" do
     create(:quarantined_version, name: "rails", version: "7.1.0", platform: "ruby")
+    stub_versions_request
     stub_info_request("rails")
 
     @service.sync_info("rails")
@@ -118,6 +200,7 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
   test "sync_info filters blocked versions" do
     gem_package = create(:gem_package, name: "rails")
     create(:gem_version, :blocked, gem_package: gem_package, version: "7.1.0", platform: "ruby")
+    stub_versions_request
     stub_info_request("rails")
 
     @service.sync_info("rails")
@@ -129,6 +212,7 @@ class CompactIndexServiceTest < ActiveSupport::TestCase
   end
 
   test "sync_info returns false for non-existent gem" do
+    stub_versions_request
     stub_request(:get, "https://rubygems.org/info/nonexistent")
       .to_return(status: 404)
 
